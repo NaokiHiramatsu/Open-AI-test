@@ -29,7 +29,7 @@ def ask_openai():
             {"role": "system", "content": "You are an assistant."},
             {"role": "user", "content": prompt}
         ],
-        max_tokens=50
+        max_tokens=200
     )
 
     # OpenAIからの応答を返す
