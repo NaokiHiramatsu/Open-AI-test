@@ -1,6 +1,6 @@
 import openai
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
@@ -11,15 +11,20 @@ openai.api_version = "2023-03-15-preview"
 openai.api_key = os.getenv("OPENAI_API_KEY")  # 環境変数からAPIキーを取得
 deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")  # デプロイ名
 
+# GETリクエストでフォームを表示するルート
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+# POSTリクエストでプロンプトを処理するルート
 @app.route('/ask_openai', methods=['POST'])
 def ask_openai():
-    # クライアントからのプロンプトを取得
-    data = request.json
-    prompt = data.get('prompt', '')
+    # フォームからプロンプトを取得
+    prompt = request.form.get('prompt', '')
 
     # Azure OpenAIにリクエストを送信
     response = openai.ChatCompletion.create(
-        engine=deployment_name,  # 環境変数から取得したデプロイ名を使用
+        engine=deployment_name,
         messages=[
             {"role": "system", "content": "You are an assistant."},
             {"role": "user", "content": prompt}
@@ -27,7 +32,7 @@ def ask_openai():
         max_tokens=50
     )
 
-    # OpenAIからの応答をJSONで返す
+    # OpenAIからの応答を返す
     return jsonify(response['choices'][0]['message']['content'])
 
 if __name__ == '__main__':
