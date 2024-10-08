@@ -42,24 +42,21 @@ def ask_openai():
         query_type="semantic",  # セマンティック検索
         search_fields="content"  # 検索対象フィールドを限定
     )
-    
+
     # 取得したドキュメントの最初の一部を要約
     relevant_docs = []
     for doc in search_results:
         doc_content = doc.get('content', '')
         relevant_docs.append(doc_content[:500])  # 各ドキュメントの最初の500文字を取得
 
-    # ドキュメントの要約を作成
-    relevant_docs_summary = "\n\n".join(relevant_docs)
-
     # Azure OpenAI にプロンプトと関連ドキュメントを送信
     response = openai.ChatCompletion.create(
         engine=deployment_name,
         messages=[
-            {"role": "system", "content": "You are an assistant. Use the provided documents to help answer questions accurately."},
-            {"role": "user", "content": f"Here are some documents:\n{relevant_docs_summary}\nBased on these, please answer the following question: {prompt}"}
+            {"role": "system", "content": "You are an assistant."},
+            {"role": "user", "content": f"Based on the following documents:\n{'\n'.join(relevant_docs)}\nAnswer the question: {prompt}"}
         ],
-        max_tokens=100  # 応答のトークン数を調整
+        max_tokens=100
     )
 
     # 応答を JSON で返す
