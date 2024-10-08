@@ -36,25 +36,15 @@ def ask_openai():
     prompt = request.form.get('prompt', '')
 
     # Azure Search で関連するドキュメントを検索
-    search_results = search_client.search(
-        search_text=prompt,
-        top=5,  # 検索結果を増やす
-        query_type="semantic",  # セマンティック検索
-        search_fields="content"  # 検索対象フィールドを限定
-    )
-
-    # 取得したドキュメントの最初の一部を要約
-    relevant_docs = []
-    for doc in search_results:
-        doc_content = doc.get('content', '')
-        relevant_docs.append(doc_content[:500])  # 各ドキュメントの最初の500文字を取得
+    search_results = search_client.search(search_text=prompt, top=3)
+    relevant_docs = "\n".join([doc['content'] for doc in search_results])
 
     # Azure OpenAI にプロンプトと関連ドキュメントを送信
     response = openai.ChatCompletion.create(
         engine=deployment_name,
         messages=[
             {"role": "system", "content": "You are an assistant."},
-            {"role": "user", "content": f"Based on the following documents:\n{'\n'.join(relevant_docs)}\nAnswer the question: {prompt}"}
+            {"role": "user", "content": f"Based on the following documents:\n{relevant_docs}\nAnswer the question: {prompt}"}
         ],
         max_tokens=100
     )
