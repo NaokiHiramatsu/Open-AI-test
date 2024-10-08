@@ -2,7 +2,7 @@ import openai
 import os
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify,render_template
 
 app = Flask(__name__)
 
