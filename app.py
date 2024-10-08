@@ -1,8 +1,8 @@
 import openai
 import os
+from flask import Flask, request, jsonify, render_template
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
-from flask import Flask, request, jsonify,render_template
 
 app = Flask(__name__)
 
@@ -16,7 +16,7 @@ deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
 # Azure Cognitive Search の設定
 search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
 search_service_key = os.getenv("AZURE_SEARCH_KEY")
-index_name = "vector-1727336068502"
+index_name = "vector-1727336068502"  # 使用するインデックス名を指定
 
 # SearchClient の設定
 search_client = SearchClient(
@@ -25,17 +25,21 @@ search_client = SearchClient(
     credential=AzureKeyCredential(search_service_key)
 )
 
-@app.route('/ask_openai_rag', methods=['POST'])
-def ask_openai_rag():
-    # クライアントからの質問を取得
-    data = request.json
-    prompt = data.get('prompt', '')
+# フォームを表示するルート
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-    # Azure Searchで関連するドキュメントを検索
+# POSTリクエストでプロンプトを処理するルート
+@app.route('/ask_openai', methods=['POST'])
+def ask_openai():
+    prompt = request.form.get('prompt', '')
+
+    # Azure Search で関連するドキュメントを検索
     search_results = search_client.search(search_text=prompt, top=3)
     relevant_docs = "\n".join([doc['content'] for doc in search_results])
 
-    # Azure OpenAIにプロンプトと関連ドキュメントを送信
+    # Azure OpenAI にプロンプトと関連ドキュメントを送信
     response = openai.ChatCompletion.create(
         engine=deployment_name,
         messages=[
@@ -45,7 +49,7 @@ def ask_openai_rag():
         max_tokens=100
     )
 
-    # OpenAIからの応答をJSONで返す
+    # 応答を JSON で返す
     return jsonify(response['choices'][0]['message']['content'])
 
 if __name__ == '__main__':
