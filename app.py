@@ -37,7 +37,7 @@ def ask_openai():
 
     # Azure Search で関連するドキュメントを検索
     search_results = search_client.search(search_text=prompt, top=3)
-    relevant_docs = "\n".join([doc['content'] for doc in search_results])
+    relevant_docs = "\n".join([doc['chunk'] for doc in search_results])  # 'content' を 'chunk' に変更
 
     # Azure OpenAI にプロンプトと関連ドキュメントを送信
     response = openai.ChatCompletion.create(
