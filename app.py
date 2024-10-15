@@ -39,14 +39,14 @@ def ask_openai():
     search_results = search_client.search(search_text=prompt, top=3)
     relevant_docs = "\n".join([doc['chunk'] for doc in search_results])  # 'content' を 'chunk' に変更
 
-    # Azure OpenAI にプロンプトと関連ドキュメントを送信
+    # Azure OpenAI にプロンプトと関連ドキュメントを送信（日本語対応）
     response = openai.ChatCompletion.create(
         engine=deployment_name,
         messages=[
-            {"role": "system", "content": "You are an assistant."},
-            {"role": "user", "content": f"Based on the following documents:\n{relevant_docs}\nAnswer the question: {prompt}"}
+            {"role": "system", "content": "あなたは有能なアシスタントです。"},
+            {"role": "user", "content": f"以下のドキュメントに基づいて質問に答えてください：\n{relevant_docs}\n質問: {prompt}"}
         ],
-        max_tokens=100
+        max_tokens=500  # 応答のトークン数を増やす
     )
 
     # 応答を JSON で返す
