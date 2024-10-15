@@ -9,7 +9,7 @@ app = Flask(__name__)
 # 環境変数からAPIキーやエンドポイントを取得
 openai.api_type = "azure"
 openai.api_base = os.getenv("OPENAI_API_BASE")
-openai.api_version = "2023-03-15-preview"
+openai.api_version = "2024-05-13"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
 
