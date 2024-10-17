@@ -31,52 +31,40 @@ search_client = SearchClient(
 def index():
     return render_template('index.html')
 
-# ファイルアップロードのルート
-@app.route('/upload_files', methods=['POST'])
-def upload_files():
-    application_list_file = request.files['application_list']
-    preapproval_list_file = request.files['preapproval_list']
+# ファイルとプロンプトを処理するルート
+@app.route('/process_files_and_prompt', methods=['POST'])
+def process_files_and_prompt():
+    application_list_file = request.files.get('application_list')
+    preapproval_list_file = request.files.get('preapproval_list')
+    prompt = request.form.get('prompt', '')
 
     # ファイルをDataFrameとして読み込む
     try:
         application_df = pd.read_excel(application_list_file)
         preapproval_df = pd.read_excel(preapproval_list_file)
 
-        # 読み込んだデータを確認
+        # ファイル内容を確認（行数を確認するなど）
         application_count = len(application_df)
         preapproval_count = len(preapproval_df)
 
-        # 読み込み結果を返す
-        return f"申請リスト: {application_count} 行, 事前承認リスト: {preapproval_count} 行が読み込まれました。"
-    except Exception as e:
-        return f"エラーが発生しました: {str(e)}"
+        # OpenAIに送信するメッセージを構成
+        input_data = f"申請リストには {application_count} 行、事前承認リストには {preapproval_count} 行があります。\nプロンプト: {prompt}"
 
-# POSTリクエストでプロンプトを処理するルート
-@app.route('/ask_openai', methods=['POST'])
-def ask_openai():
-    prompt = request.form.get('prompt', '')
-
-    try:
-        # Azure Search で関連するドキュメントを検索
-        search_results = search_client.search(search_text=prompt, top=3)
-        relevant_docs = "\n".join([doc['chunk'] for doc in search_results])  # 'content' を 'chunk' に変更
-
-        # Azure OpenAI にプロンプトと関連ドキュメントを送信（日本語対応）
+        # Azure OpenAI にプロンプトと関連データを送信
         response = openai.ChatCompletion.create(
             engine=deployment_name,
             messages=[
                 {"role": "system", "content": "あなたは有能なアシスタントです。"},
-                {"role": "user", "content": f"以下のドキュメントに基づいて質問に答えてください：\n{relevant_docs}\n質問: {prompt}"}
+                {"role": "user", "content": input_data}
             ],
             max_tokens=500  # 応答のトークン数を増やす
         )
 
-        # 応答を JSON で返す
+        # 応答を返す
         return jsonify(response['choices'][0]['message']['content'])
 
     except Exception as e:
-        # エラーが発生した場合は、エラーメッセージを返す
-        return jsonify({"error": str(e)}), 500
+        return f"エラーが発生しました: {str(e)}"
 
 if __name__ == '__main__':
     app.run(debug=True)
