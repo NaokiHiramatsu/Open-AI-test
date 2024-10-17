@@ -40,8 +40,9 @@ def process_files_and_prompt():
 
     # ファイルをDataFrameとして読み込む
     try:
-        application_df = pd.read_excel(application_list_file)
-        preapproval_df = pd.read_excel(preapproval_list_file)
+        # 'openpyxl'エンジンを指定してExcelファイルを読み込む
+        application_df = pd.read_excel(application_list_file, engine='openpyxl')
+        preapproval_df = pd.read_excel(preapproval_list_file, engine='openpyxl')
 
         # ファイル内容を確認（行数を確認するなど）
         application_count = len(application_df)
