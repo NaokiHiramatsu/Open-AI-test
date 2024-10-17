@@ -3,3 +3,4 @@ Werkzeug==2.0.3
 openai==0.27.0
 azure-search-documents==11.4.0
 azure-core>=1.28.0
+pandas
