@@ -2,14 +2,17 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Ask OpenAI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ファイルアップロード</title>
 </head>
 <body>
-    <h1>Ask OpenAI</h1>
-    <form action="/ask_openai" method="POST">
-        <label for="prompt">Prompt:</label>
-        <input type="text" id="prompt" name="prompt" placeholder="Enter your question">
-        <button type="submit">Send</button>
+    <h1>申請リストと事前承認リストのアップロード</h1>
+    <form action="/upload_files" method="post" enctype="multipart/form-data">
+        <label for="application_list">申請リスト:</label>
+        <input type="file" name="application_list" id="application_list" accept=".xlsx"><br><br>
+        <label for="preapproval_list">事前承認リスト:</label>
+        <input type="file" name="preapproval_list" id="preapproval_list" accept=".xlsx"><br><br>
+        <input type="submit" value="アップロード">
     </form>
 </body>
 </html>
