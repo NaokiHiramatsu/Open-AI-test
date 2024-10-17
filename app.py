@@ -14,18 +14,6 @@ openai.api_version = "2024-08-01-preview"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
 
-# Azure Cognitive Search の設定
-search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
-search_service_key = os.getenv("AZURE_SEARCH_KEY")
-index_name = "hiramatsu2"  # 使用するインデックス名を指定
-
-# SearchClient の設定
-search_client = SearchClient(
-    endpoint=search_service_endpoint,
-    index_name=index_name,
-    credential=AzureKeyCredential(search_service_key)
-)
-
 # ホームページを表示するルート
 @app.route('/')
 def index():
@@ -58,11 +46,12 @@ def process_files_and_prompt():
                 {"role": "system", "content": "あなたは有能なアシスタントです。"},
                 {"role": "user", "content": input_data}
             ],
-            max_tokens=500  # 応答のトークン数を増やす
+            max_tokens=2000  # 応答のトークン数を増やす
         )
 
-        # 応答を返す
-        return jsonify(response['choices'][0]['message']['content'])
+        # 応答をテンプレートに渡して表示
+        response_content = response['choices'][0]['message']['content']
+        return render_template('index.html', response_content=response_content)
 
     except Exception as e:
         return f"エラーが発生しました: {str(e)}"
