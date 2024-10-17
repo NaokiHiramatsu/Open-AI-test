@@ -3,16 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ファイルアップロード</title>
+    <title>ファイルアップロードとプロンプト</title>
 </head>
 <body>
-    <h1>申請リストと事前承認リストのアップロード</h1>
-    <form action="/upload_files" method="post" enctype="multipart/form-data">
+    <h1>ファイルアップロードとプロンプト入力</h1>
+    <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
         <label for="application_list">申請リスト:</label>
         <input type="file" name="application_list" id="application_list" accept=".xlsx"><br><br>
+
         <label for="preapproval_list">事前承認リスト:</label>
         <input type="file" name="preapproval_list" id="preapproval_list" accept=".xlsx"><br><br>
-        <input type="submit" value="アップロード">
+
+        <label for="prompt">プロンプト（指示）:</label>
+        <input type="text" id="prompt" name="prompt" placeholder="指示を入力してください"><br><br>
+
+        <input type="submit" value="送信">
     </form>
 </body>
 </html>
