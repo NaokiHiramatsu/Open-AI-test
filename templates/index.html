@@ -4,6 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ファイルアップロードとプロンプト</title>
+    <style>
+        .response {
+            white-space: pre-wrap; /* 改行やスペースをそのまま表示 */
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+    </style>
 </head>
 <body>
     <h1>ファイルアップロードとプロンプト入力</h1>
@@ -19,5 +29,10 @@
 
         <input type="submit" value="送信">
     </form>
+
+    <!-- 応答を表示するための場所 -->
+    <div class="response">
+        {{ response_content }}  <!-- Flask側で返される応答をここに表示 -->
+    </div>
 </body>
 </html>
