@@ -22,6 +22,15 @@ jobs:
         with:
           python-version: '3.8'
 
+      # pip依存パッケージのキャッシュを追加
+      - name: Cache pip dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Create and start virtual environment
         run: |
           python -m venv venv
@@ -30,7 +39,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
+      # アーティファクトのZIP作成
       - name: Zip artifact for deployment
         run: zip release.zip ./* -r
 
@@ -58,6 +67,7 @@ jobs:
       - name: Unzip artifact for deployment
         run: unzip release.zip
 
+      # Azure Web Appへのデプロイ
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v2
         id: deploy-to-webapp
