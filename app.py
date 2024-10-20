@@ -1,6 +1,8 @@
 import openai
 import os
 from flask import Flask, request, render_template, session
+from azure.search.documents import SearchClient
+from azure.core.credentials import AzureKeyCredential
 import pandas as pd
 
 app = Flask(__name__)
@@ -12,6 +14,18 @@ openai.api_base = os.getenv("OPENAI_API_BASE")
 openai.api_version = "2024-08-01-preview"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
+
+# Azure Cognitive Search の設定
+search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
+search_service_key = os.getenv("AZURE_SEARCH_KEY")
+index_name = "vector-1727336068502"  # 使用するインデックス名を指定
+
+# SearchClient の設定
+search_client = SearchClient(
+    endpoint=search_service_endpoint,
+    index_name=index_name,
+    credential=AzureKeyCredential(search_service_key)
+)
 
 # ホームページを表示するルート
 @app.route('/')
@@ -68,8 +82,15 @@ def process_files_and_prompt():
             # ファイルがない場合でも、プロンプトをそのまま使用してOpenAIにリクエストを送信
             input_data = f"プロンプトのみが入力されました:\nプロンプト: {prompt}"
 
+        # Azure Search で関連するドキュメントを検索
+        search_results = search_client.search(search_text=prompt, top=3)
+        relevant_docs = "\n".join([doc['chunk'] for doc in search_results])  # 'chunk' を使用
+
+        # 最新のプロンプトに検索結果を追加
+        input_data_with_search = f"以下のドキュメントに基づいて質問に答えてください：\n{relevant_docs}\n質問: {input_data}"
+
         # 最新のプロンプトを追加
-        messages.append({"role": "user", "content": input_data})
+        messages.append({"role": "user", "content": input_data_with_search})
 
         # Azure OpenAI にプロンプトとファイル内容を送信
         response = openai.ChatCompletion.create(
