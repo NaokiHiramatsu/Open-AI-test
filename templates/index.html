@@ -3,43 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>チャットとファイルアップロード</title>
+    <title>ファイルアップロードとプロンプト入力</title>
     <style>
         .response {
-            white-space: pre-wrap; /* 改行やスペースをそのまま表示 */
+            white-space: pre-wrap;
             padding: 10px;
             border: 1px solid #ccc;
             background-color: #f9f9f9;
             margin-top: 20px;
             border-radius: 5px;
         }
+
+        .file-upload {
+            background-color: #f2f2f2;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .file-upload label {
+            font-size: 16px;
+            cursor: pointer;
+            padding: 10px 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+        }
+
+        .file-upload:hover {
+            border-color: #007bff;
+        }
+
+        .file-list {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            font-size: 14px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .chat-section {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            background-color: #f5f5f5;
+        }
+
+        .chat-entry {
+            margin-bottom: 10px;
+        }
+
+        .user-message {
+            color: #007bff;
+            font-weight: bold;
+        }
+
+        .assistant-message {
+            color: #555;
+            padding-left: 20px;
+        }
     </style>
 </head>
 <body>
-    <h1>チャットとファイルアップロード</h1>
-    
+    <h1>ファイルアップロードとプロンプト入力</h1>
     <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
-        <label for="application_list">申請リスト (任意):</label>
-        <input type="file" name="application_list" id="application_list" accept=".xlsx"><br><br>
+        <div class="file-upload">
+            <label for="file-input">ファイルを選択 (複数可)</label>
+            <input type="file" name="files" id="file-input" accept=".xlsx" multiple>
+            <div class="file-list" id="file-list">選択されたファイルがここに表示されます</div>
+        </div>
 
-        <label for="preapproval_list">事前承認リスト (任意):</label>
-        <input type="file" name="preapproval_list" id="preapproval_list" accept=".xlsx"><br><br>
+        <br><br>
 
         <label for="prompt">プロンプト（指示）:</label><br>
-        <textarea id="prompt" name="prompt" rows="10" cols="80" placeholder="ここに指示を入力してください"></textarea><br><br>
+        <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea><br><br>
 
         <input type="submit" value="送信">
     </form>
 
-    <!-- チャット履歴を表示 -->
-    <div class="response">
-        {% for message in chat_history %}
-            {% if message.role == 'user' %}
-                <strong>ユーザー:</strong> {{ message.content }}<br>
-            {% elif message.role == 'assistant' %}
-                <strong>アシスタント:</strong> {{ message.content }}<br><br>
-            {% endif %}
-        {% endfor %}
+    <!-- 応答を表示するための場所 -->
+    <div class="chat-section">
+        {% if chat_history %}
+            {% for entry in chat_history %}
+                <div class="chat-entry">
+                    <div class="user-message">ユーザー: {{ entry['user'] }}</div>
+                    <div class="assistant-message">アシスタント: {{ entry['assistant'] }}</div>
+                </div>
+            {% endfor %}
+        {% endif %}
     </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+
+        fileInput.addEventListener('change', function() {
+            const files = fileInput.files;
+            let fileNames = '';
+            for (let i = 0; i < files.length; i++) {
+                fileNames += files[i].name + '<br>';
+            }
+            fileList.innerHTML = fileNames ? fileNames : '選択されたファイルがありません';
+        });
+    </script>
 </body>
 </html>
