@@ -1,8 +1,6 @@
 import openai
 import os
-from flask import Flask, request, jsonify, render_template, session
-from azure.search.documents import SearchClient
-from azure.core.credentials import AzureKeyCredential
+from flask import Flask, request, render_template, session
 import pandas as pd
 
 app = Flask(__name__)
@@ -18,8 +16,7 @@ deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
 # ホームページを表示するルート
 @app.route('/')
 def index():
-    # ブラウザを閉じたらセッションが消えるようにする
-    session.clear()  # セッションをリセット
+    session.clear()  # ブラウザを閉じたらセッションをリセット
     return render_template('index.html', chat_history=[])
 
 # ファイルとプロンプトを処理するルート
@@ -30,6 +27,14 @@ def process_files_and_prompt():
 
     if 'chat_history' not in session:
         session['chat_history'] = []  # チャット履歴を初期化
+
+    # チャット履歴を基にAIへ送信するメッセージを構成
+    messages = [{"role": "system", "content": "あなたは有能なアシスタントです。"}]
+    
+    # チャット履歴を追加
+    for entry in session['chat_history']:
+        messages.append({"role": "user", "content": entry['user']})
+        messages.append({"role": "assistant", "content": entry['assistant']})
 
     # ファイルがアップロードされている場合の処理
     file_data_text = []
@@ -63,20 +68,20 @@ def process_files_and_prompt():
             # ファイルがない場合でも、プロンプトをそのまま使用してOpenAIにリクエストを送信
             input_data = f"プロンプトのみが入力されました:\nプロンプト: {prompt}"
 
+        # 最新のプロンプトを追加
+        messages.append({"role": "user", "content": input_data})
+
         # Azure OpenAI にプロンプトとファイル内容を送信
         response = openai.ChatCompletion.create(
             engine=deployment_name,
-            messages=[
-                {"role": "system", "content": "あなたは有能なアシスタントです。"},
-                {"role": "user", "content": input_data}
-            ],
+            messages=messages,  # これまでの履歴も含めて送信
             max_tokens=2000  # 応答のトークン数を増やす
         )
 
         # 応答内容を取得し、履歴に追加
         response_content = response['choices'][0]['message']['content']
         session['chat_history'].append({
-            'user': prompt,
+            'user': input_data,
             'assistant': response_content
         })
 
