@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ファイルアップロードとプロンプト</title>
+    <title>チャットとファイルアップロード</title>
     <style>
         .response {
             white-space: pre-wrap; /* 改行やスペースをそのまま表示 */
@@ -16,23 +16,30 @@
     </style>
 </head>
 <body>
-    <h1>ファイルアップロードとプロンプト入力</h1>
+    <h1>チャットとファイルアップロード</h1>
+    
     <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
-        <label for="application_list">申請リスト:</label>
+        <label for="application_list">申請リスト (任意):</label>
         <input type="file" name="application_list" id="application_list" accept=".xlsx"><br><br>
 
-        <label for="preapproval_list">事前承認リスト:</label>
+        <label for="preapproval_list">事前承認リスト (任意):</label>
         <input type="file" name="preapproval_list" id="preapproval_list" accept=".xlsx"><br><br>
 
         <label for="prompt">プロンプト（指示）:</label><br>
-        <textarea id="prompt" name="prompt" rows="20" cols="100" placeholder="ここに指示を入力してください"></textarea><br><br>
+        <textarea id="prompt" name="prompt" rows="10" cols="80" placeholder="ここに指示を入力してください"></textarea><br><br>
 
         <input type="submit" value="送信">
     </form>
 
-    <!-- 応答を表示するための場所 -->
+    <!-- チャット履歴を表示 -->
     <div class="response">
-        {{ response_content }}  <!-- Flask側で返される応答をここに表示 -->
+        {% for message in chat_history %}
+            {% if message.role == 'user' %}
+                <strong>ユーザー:</strong> {{ message.content }}<br>
+            {% elif message.role == 'assistant' %}
+                <strong>アシスタント:</strong> {{ message.content }}<br><br>
+            {% endif %}
+        {% endfor %}
     </div>
 </body>
 </html>
