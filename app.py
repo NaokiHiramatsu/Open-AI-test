@@ -1,6 +1,8 @@
 import openai
 import os
 from flask import Flask, request, jsonify, render_template
+from azure.search.documents import SearchClient
+from azure.core.credentials import AzureKeyCredential
 import pandas as pd
 
 app = Flask(__name__)
@@ -12,51 +14,62 @@ openai.api_version = "2024-08-01-preview"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
 
-# チャット履歴を格納するリスト
-chat_history = []
-
 # ホームページを表示するルート
 @app.route('/')
 def index():
-    return render_template('index.html', chat_history=chat_history)
+    return render_template('index.html')
 
 # ファイルとプロンプトを処理するルート
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
-    files = request.files.getlist('files')
+    files = request.files.getlist('files')  # 複数ファイルの取得
     prompt = request.form.get('prompt', '')
 
-    file_details = ""
-    
-    # ファイルがあれば処理
-    if files:
-        for file in files:
-            try:
-                # ExcelファイルをDataFrameとして読み込む
-                df = pd.read_excel(file, engine='openpyxl')
-                file_details += f"{file.filename}に{len(df)}行あります。\n"
-            except Exception as e:
-                return f"エラーが発生しました: {str(e)}"
-
-    # OpenAIに送信するメッセージを構成
-    input_data = f"{file_details}\nプロンプト: {prompt}"
-
-    # Azure OpenAI にプロンプトと関連データを送信
+    # ファイルがアップロードされている場合の処理
+    file_data_text = []
     try:
+        for file in files:
+            if file and file.filename.endswith('.xlsx'):  # ファイルが存在し、かつxlsx形式か確認
+                # 'openpyxl'エンジンを使用してExcelファイルを読み込む
+                df = pd.read_excel(file, engine='openpyxl')
+
+                # 列名を取得して文字列化
+                columns = df.columns.tolist()
+                columns_text = " | ".join(columns)  # 列名を区切り文字で結合
+
+                # 各行のデータを行ごとに文字列化
+                rows_text = []
+                for index, row in df.iterrows():
+                    row_text = " | ".join([str(item) for item in row.tolist()])  # 各行のデータを区切り文字で結合
+                    rows_text.append(row_text)
+
+                # 列名と行データを連結
+                df_text = f"ファイル名: {file.filename}\n{columns_text}\n" + "\n".join(rows_text)
+                file_data_text.append(df_text)
+            else:
+                continue  # 不正なファイル形式の場合、処理をスキップ
+
+        # ファイルがある場合、内容を結合して送信するデータに追加
+        if file_data_text:
+            file_contents = "\n\n".join(file_data_text)
+            input_data = f"アップロードされたファイルの内容は次の通りです:\n{file_contents}\nプロンプト: {prompt}"
+        else:
+            # ファイルがない場合でも、プロンプトをそのまま使用してOpenAIにリクエストを送信
+            input_data = f"プロンプトのみが入力されました:\nプロンプト: {prompt}"
+
+        # Azure OpenAI にプロンプトとファイル内容を送信
         response = openai.ChatCompletion.create(
             engine=deployment_name,
             messages=[
                 {"role": "system", "content": "あなたは有能なアシスタントです。"},
                 {"role": "user", "content": input_data}
             ],
-            max_tokens=2000
+            max_tokens=2000  # 応答のトークン数を増やす
         )
-        assistant_reply = response['choices'][0]['message']['content']
 
-        # チャット履歴に追加
-        chat_history.append({"user": prompt, "assistant": assistant_reply})
-
-        return render_template('index.html', chat_history=chat_history)
+        # 応答をテンプレートに渡して表示
+        response_content = response['choices'][0]['message']['content']
+        return render_template('index.html', response_content=response_content)
 
     except Exception as e:
         return f"エラーが発生しました: {str(e)}"
