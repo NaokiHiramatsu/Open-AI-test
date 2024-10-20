@@ -1,12 +1,12 @@
 import openai
 import os
-from flask import Flask, request, render_template, session
+from flask import Flask, request, jsonify, render_template, session
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 import pandas as pd
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'  # セッションの秘密鍵
+app.secret_key = os.urandom(24)  # セッションを管理するための秘密鍵
 
 # 環境変数からAPIキーやエンドポイントを取得
 openai.api_type = "azure"
@@ -18,9 +18,9 @@ deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
 # ホームページを表示するルート
 @app.route('/')
 def index():
-    # セッションに保存されたチャット履歴を取得
-    chat_history = session.get('chat_history', [])
-    return render_template('index.html', chat_history=chat_history)
+    # ブラウザを閉じたらセッションが消えるようにする
+    session.clear()  # セッションをリセット
+    return render_template('index.html', chat_history=[])
 
 # ファイルとプロンプトを処理するルート
 @app.route('/process_files_and_prompt', methods=['POST'])
@@ -28,8 +28,8 @@ def process_files_and_prompt():
     files = request.files.getlist('files')  # 複数ファイルの取得
     prompt = request.form.get('prompt', '')
 
-    # セッションからチャット履歴を取得
-    chat_history = session.get('chat_history', [])
+    if 'chat_history' not in session:
+        session['chat_history'] = []  # チャット履歴を初期化
 
     # ファイルがアップロードされている場合の処理
     file_data_text = []
@@ -73,15 +73,15 @@ def process_files_and_prompt():
             max_tokens=2000  # 応答のトークン数を増やす
         )
 
-        # 応答の内容を取得
+        # 応答内容を取得し、履歴に追加
         response_content = response['choices'][0]['message']['content']
+        session['chat_history'].append({
+            'user': prompt,
+            'assistant': response_content
+        })
 
-        # ユーザーの入力とアシスタントの応答をチャット履歴に追加
-        chat_history.append({'user': prompt, 'assistant': response_content})
-        session['chat_history'] = chat_history  # チャット履歴をセッションに保存
-
-        # チャット履歴をテンプレートに渡して表示
-        return render_template('index.html', chat_history=chat_history)
+        # 応答をテンプレートに渡して表示
+        return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
         return f"エラーが発生しました: {str(e)}"
