@@ -26,18 +26,19 @@ def process_files_and_prompt():
     preapproval_list_file = request.files.get('preapproval_list')
     prompt = request.form.get('prompt', '')
 
-    # ファイルをDataFrameとして読み込む
     try:
         # 'openpyxl'エンジンを指定してExcelファイルを読み込む
         application_df = pd.read_excel(application_list_file, engine='openpyxl')
         preapproval_df = pd.read_excel(preapproval_list_file, engine='openpyxl')
 
-        # ファイル内容を確認（行数を確認するなど）
-        application_count = len(application_df)
-        preapproval_count = len(preapproval_df)
+        # DataFrameの内容を文字列として取得
+        application_data = application_df.to_string(index=False)
+        preapproval_data = preapproval_df.to_string(index=False)
 
         # OpenAIに送信するメッセージを構成
-        input_data = f"申請リストには {application_count} 行、事前承認リストには {preapproval_count} 行があります。\nプロンプト: {prompt}"
+        input_data = f"以下は申請リストの内容です:\n{application_data}\n\n" \
+                     f"以下は事前承認リストの内容です:\n{preapproval_data}\n\n" \
+                     f"これに基づいて、次の質問に回答してください:\n{prompt}"
 
         # Azure OpenAI にプロンプトと関連データを送信
         response = openai.ChatCompletion.create(
@@ -49,8 +50,8 @@ def process_files_and_prompt():
             max_tokens=2000  # 応答のトークン数を増やす
         )
 
-        # 応答をテンプレートに渡して表示
-        response_content = response['choices'][0]['message']['content']
+        # 応答をテンプレートに渡して表示（改行を含む出力に変更）
+        response_content = response['choices'][0]['message']['content'].replace("\n", "<br>")
         return render_template('index.html', response_content=response_content)
 
     except Exception as e:
