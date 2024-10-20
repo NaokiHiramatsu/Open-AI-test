@@ -1,8 +1,6 @@
 import openai
 import os
-from flask import Flask, request, jsonify, render_template
-from azure.search.documents import SearchClient
-from azure.core.credentials import AzureKeyCredential
+from flask import Flask, request, render_template
 import pandas as pd
 
 app = Flask(__name__)
@@ -14,10 +12,13 @@ openai.api_version = "2024-08-01-preview"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
 
+# チャット履歴を保持するリスト
+chat_history = []
+
 # ホームページを表示するルート
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', chat_history=chat_history)
 
 # ファイルとプロンプトを処理するルート
 @app.route('/process_files_and_prompt', methods=['POST'])
@@ -26,33 +27,43 @@ def process_files_and_prompt():
     preapproval_list_file = request.files.get('preapproval_list')
     prompt = request.form.get('prompt', '')
 
+    # ファイルの内容を読み込む処理（任意）
+    application_data = ""
+    preapproval_data = ""
+
     try:
-        # 'openpyxl'エンジンを指定してExcelファイルを読み込む
-        application_df = pd.read_excel(application_list_file, engine='openpyxl')
-        preapproval_df = pd.read_excel(preapproval_list_file, engine='openpyxl')
+        if application_list_file:
+            application_df = pd.read_excel(application_list_file, engine='openpyxl')
+            application_data = application_df.to_string(index=False)
+        
+        if preapproval_list_file:
+            preapproval_df = pd.read_excel(preapproval_list_file, engine='openpyxl')
+            preapproval_data = preapproval_df.to_string(index=False)
+        
+        input_data = f"申請リスト:\n{application_data}\n\n" \
+                     f"事前承認リスト:\n{preapproval_data}\n\n" \
+                     f"質問:\n{prompt}"
 
-        # DataFrameの内容を文字列として取得
-        application_data = application_df.to_string(index=False)
-        preapproval_data = preapproval_df.to_string(index=False)
+    except Exception as e:
+        input_data = f"プロンプトのみ: {prompt}"
 
-        # OpenAIに送信するメッセージを構成
-        input_data = f"以下は申請リストの内容です:\n{application_data}\n\n" \
-                     f"以下は事前承認リストの内容です:\n{preapproval_data}\n\n" \
-                     f"これに基づいて、次の質問に回答してください:\n{prompt}"
+    # チャット履歴に今回の入力を追加
+    chat_history.append({"role": "user", "content": prompt})
 
-        # Azure OpenAI にプロンプトと関連データを送信
+    # Azure OpenAI にプロンプトと関連データを送信
+    try:
         response = openai.ChatCompletion.create(
             engine=deployment_name,
-            messages=[
-                {"role": "system", "content": "あなたは有能なアシスタントです。"},
-                {"role": "user", "content": input_data}
-            ],
-            max_tokens=2000  # 応答のトークン数を増やす
+            messages=chat_history + [{"role": "user", "content": input_data}],
+            max_tokens=2000
         )
-
-        # 応答をテンプレートに渡して表示（改行を含む出力に変更）
-        response_content = response['choices'][0]['message']['content'].replace("\n", "<br>")
-        return render_template('index.html', response_content=response_content)
+        
+        # 応答をチャット履歴に追加
+        response_content = response['choices'][0]['message']['content']
+        chat_history.append({"role": "assistant", "content": response_content})
+        
+        # 更新されたチャット履歴を表示
+        return render_template('index.html', chat_history=chat_history)
 
     except Exception as e:
         return f"エラーが発生しました: {str(e)}"
