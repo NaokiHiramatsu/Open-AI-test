@@ -29,12 +29,12 @@
             color: #333;
         }
         .assistant-message {
-            background-color: #d1ecf1;
+            background-color: #e9ecef;
             padding: 10px;
             border-radius: 5px;
             margin: 10px 0;
             white-space: pre-wrap;
-            color: #007bff;
+            color: #000;
         }
         textarea {
             width: 100%;
@@ -76,10 +76,11 @@
 
         <!-- チャット履歴を表示 -->
         <div class="chat-log">
-            {% if response_content %}
-                <!-- 過去のプロンプトと返答を表示 -->
-                <div class="user-message">ユーザー: {{ prompt | safe }}</div>
-                <div class="assistant-message">アシスタント: {{ response_content | safe }}</div>
+            {% if chat_history %}
+                {% for entry in chat_history %}
+                    <div class="user-message">ユーザー: {{ entry['user'] }}</div>
+                    <div class="assistant-message">生成AI: {{ entry['assistant'] }}</div>
+                {% endfor %}
             {% endif %}
         </div>
     </div>
