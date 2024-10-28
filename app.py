@@ -18,7 +18,7 @@ deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
 # Azure Cognitive Search の設定
 search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
 search_service_key = os.getenv("AZURE_SEARCH_KEY")
-index_name = "preapproval-index"  # 使用するインデックス名を指定
+index_name = "vector-1730110777868"  # 使用するインデックス名を指定
 
 # SearchClient の設定
 search_client = SearchClient(
