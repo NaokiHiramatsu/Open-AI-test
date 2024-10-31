@@ -7,3 +7,4 @@ pandas
 openpyxl
 python-docx
 python-pptx
+pdfplumber
