@@ -170,21 +170,19 @@ def process_files_and_prompt():
 
         # 出力の必要性を判断し、出力が必要な場合はダウンロードリンクを生成
         download_link = determine_file_type_and_generate(response_content)
+        print("Download link:", download_link)  # デバッグ用
         if download_link:
             response_content += f"\n\n[こちらからダウンロード]({download_link}) できます。"
 
-        # 応答をテンプレートに渡して表示
+        # 応答内容をコンソールに表示
+        print("Response content with link:", response_content)  # デバッグ用
         session['generated_content'] = response_content
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
         return f"エラーが発生しました: {str(e)}"
 
-# 出力の必要性を判断してファイルを生成
 def determine_file_type_and_generate(response_content):
-    """
-    応答内容を解析し、出力が必要な場合は指定形式のファイルを生成し、ダウンロードリンクを生成。
-    """
     if "Excel" in response_content:
         return generate_file('excel', response_content)
     elif "PDF" in response_content:
@@ -196,15 +194,12 @@ def determine_file_type_and_generate(response_content):
     else:
         return None
 
-# ファイルを生成し、リンクを作成
 def generate_file(file_type, content):
-    """
-    指定されたファイル形式でコンテンツをファイルに保存し、ダウンロードリンクを作成。
-    """
     if file_type == 'txt':
         temp_file_path = tempfile.mktemp(suffix=".txt")
         with open(temp_file_path, 'w', encoding='utf-8') as f:
             f.write(content)
+        print("Generated TXT file at:", temp_file_path)  # デバッグ用
         return url_for('download_file', file_path=temp_file_path)
 
     elif file_type == 'pdf':
@@ -214,12 +209,14 @@ def generate_file(file_type, content):
         pdf.set_font("Arial", size=12)
         pdf.multi_cell(0, 10, content)
         pdf.output(temp_pdf_path)
+        print("Generated PDF file at:", temp_pdf_path)  # デバッグ用
         return url_for('download_file', file_path=temp_pdf_path)
 
     elif file_type == 'excel':
         temp_excel_path = tempfile.mktemp(suffix=".xlsx")
         df = pd.DataFrame({"Content": [content]})
         df.to_excel(temp_excel_path, index=False)
+        print("Generated Excel file at:", temp_excel_path)  # デバッグ用
         return url_for('download_file', file_path=temp_excel_path)
 
     elif file_type == 'word':
@@ -228,9 +225,9 @@ def generate_file(file_type, content):
         doc.add_heading('Generated Content', level=1)
         doc.add_paragraph(content)
         doc.save(temp_word_path)
+        print("Generated Word file at:", temp_word_path)  # デバッグ用
         return url_for('download_file', file_path=temp_word_path)
 
-# ダウンロードリンクの生成
 @app.route('/download_file')
 def download_file():
     file_path = request.args.get('file_path', None)
