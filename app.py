@@ -1,10 +1,13 @@
 import openai
 import os
-from flask import Flask, request, jsonify, render_template, session
+from flask import Flask, request, jsonify, render_template, session, send_file, url_for
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 import requests
 import pandas as pd
+from fpdf import FPDF
+from docx import Document
+import tempfile
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # セッションを管理するための秘密鍵
@@ -151,7 +154,7 @@ def process_files_and_prompt():
         # 最新のプロンプトを追加
         messages.append({"role": "user", "content": input_data_with_search})
 
-        # Azure OpenAI にプロンプトとファイル内容を送信
+        # AIにプロンプトとファイル内容を送信して応答を取得
         response = openai.ChatCompletion.create(
             engine=deployment_name,
             messages=messages,
@@ -165,11 +168,76 @@ def process_files_and_prompt():
             'assistant': response_content
         })
 
+        # 出力の必要性を判断し、出力が必要な場合はダウンロードリンクを生成
+        download_link = determine_file_type_and_generate(response_content)
+        if download_link:
+            response_content += f"\n\n[こちらからダウンロード]({download_link}) できます。"
+
         # 応答をテンプレートに渡して表示
+        session['generated_content'] = response_content
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
         return f"エラーが発生しました: {str(e)}"
+
+# 出力の必要性を判断してファイルを生成
+def determine_file_type_and_generate(response_content):
+    """
+    応答内容を解析し、出力が必要な場合は指定形式のファイルを生成し、ダウンロードリンクを生成。
+    """
+    if "Excel" in response_content:
+        return generate_file('excel', response_content)
+    elif "PDF" in response_content:
+        return generate_file('pdf', response_content)
+    elif "Word" in response_content:
+        return generate_file('word', response_content)
+    elif "テキスト" in response_content or "txt" in response_content:
+        return generate_file('txt', response_content)
+    else:
+        return None
+
+# ファイルを生成し、リンクを作成
+def generate_file(file_type, content):
+    """
+    指定されたファイル形式でコンテンツをファイルに保存し、ダウンロードリンクを作成。
+    """
+    if file_type == 'txt':
+        temp_file_path = tempfile.mktemp(suffix=".txt")
+        with open(temp_file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return url_for('download_file', file_path=temp_file_path)
+
+    elif file_type == 'pdf':
+        temp_pdf_path = tempfile.mktemp(suffix=".pdf")
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        pdf.multi_cell(0, 10, content)
+        pdf.output(temp_pdf_path)
+        return url_for('download_file', file_path=temp_pdf_path)
+
+    elif file_type == 'excel':
+        temp_excel_path = tempfile.mktemp(suffix=".xlsx")
+        df = pd.DataFrame({"Content": [content]})
+        df.to_excel(temp_excel_path, index=False)
+        return url_for('download_file', file_path=temp_excel_path)
+
+    elif file_type == 'word':
+        temp_word_path = tempfile.mktemp(suffix=".docx")
+        doc = Document()
+        doc.add_heading('Generated Content', level=1)
+        doc.add_paragraph(content)
+        doc.save(temp_word_path)
+        return url_for('download_file', file_path=temp_word_path)
+
+# ダウンロードリンクの生成
+@app.route('/download_file')
+def download_file():
+    file_path = request.args.get('file_path', None)
+    if file_path and os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True)
+    else:
+        return "File not found.", 404
 
 if __name__ == '__main__':
     app.run(debug=True)
