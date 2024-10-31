@@ -7,6 +7,7 @@ import requests
 import pandas as pd
 from fpdf import FPDF
 from docx import Document
+from pptx import Presentation
 import tempfile
 
 app = Flask(__name__)
@@ -133,6 +134,20 @@ def process_files_and_prompt():
                 text = ocr_pdf(file)
                 pdf_text = f"ファイル名: {file.filename}\n{text}"
                 file_data_text.append(pdf_text)
+            elif file and file.filename.endswith('.docx'):  # Wordファイルの処理
+                doc = Document(file)
+                word_text = "\n".join([para.text for para in doc.paragraphs])
+                word_text = f"ファイル名: {file.filename}\n{word_text}"
+                file_data_text.append(word_text)
+            elif file and file.filename.endswith('.pptx'):  # PPTファイルの処理
+                ppt = Presentation(file)
+                ppt_text = []
+                for slide in ppt.slides:
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text"):
+                            ppt_text.append(shape.text)
+                ppt_text = f"ファイル名: {file.filename}\n" + "\n".join(ppt_text)
+                file_data_text.append(ppt_text)
             else:
                 continue  # 不正なファイル形式の場合、処理をスキップ
 
@@ -141,7 +156,6 @@ def process_files_and_prompt():
             file_contents = "\n\n".join(file_data_text)
             input_data = f"アップロードされたファイルの内容は次の通りです:\n{file_contents}\nプロンプト: {prompt}"
         else:
-            # ファイルがない場合でも、プロンプトをそのまま使用してOpenAIにリクエストを送信
             input_data = f"プロンプトのみが入力されました:\nプロンプト: {prompt}"
 
         # Azure Search で関連するドキュメントを検索
@@ -150,8 +164,6 @@ def process_files_and_prompt():
 
         # 最新のプロンプトに検索結果を追加
         input_data_with_search = f"以下のドキュメントに基づいて質問に答えてください：\n{relevant_docs}\n質問: {input_data}"
-
-        # 最新のプロンプトを追加
         messages.append({"role": "user", "content": input_data_with_search})
 
         # AIにプロンプトとファイル内容を送信して応答を取得
