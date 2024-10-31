@@ -73,6 +73,31 @@ def ocr_image(image_url):
             text_results.append(line_text)
     return "\n".join(text_results)
 
+def ocr_pdf(file):
+    """
+    PDFファイルをOCRにかけるための関数
+    """
+    ocr_url = vision_endpoint + "/vision/v3.2/read/analyze"
+    headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key, "Content-Type": "application/pdf"}
+
+    # OCRリクエストを送信
+    response = requests.post(ocr_url, headers=headers, data=file.read())
+    response.raise_for_status()
+
+    # 操作の完了を待機
+    operation_url = response.headers["Operation-Location"]
+    analysis = {}
+    while not "analyzeResult" in analysis:
+        response_final = requests.get(operation_url, headers={"Ocp-Apim-Subscription-Key": vision_subscription_key})
+        analysis = response_final.json()
+
+    # 結果を取得し、テキスト部分を抽出
+    text_results = []
+    for read_result in analysis["analyzeResult"]["readResults"]:
+        for line in read_result["lines"]:
+            text_results.append(line["text"])
+    return "\n".join(text_results)
+
 # ファイルとプロンプトを処理するルート
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
@@ -94,22 +119,17 @@ def process_files_and_prompt():
     file_data_text = []
     try:
         for file in files:
-            if file and file.filename.endswith('.xlsx'):  # ファイルが存在し、かつxlsx形式か確認
+            if file and file.filename.endswith('.xlsx'):  # Excelファイルの処理
                 df = pd.read_excel(file, engine='openpyxl')
-
-                # 列名を取得して文字列化
                 columns = df.columns.tolist()
                 columns_text = " | ".join(columns)
-
-                # 各行のデータを行ごとに文字列化
-                rows_text = []
-                for index, row in df.iterrows():
-                    row_text = " | ".join([str(item) for item in row.tolist()])
-                    rows_text.append(row_text)
-
-                # 列名と行データを連結
+                rows_text = [" | ".join([str(item) for item in row.tolist()]) for index, row in df.iterrows()]
                 df_text = f"ファイル名: {file.filename}\n{columns_text}\n" + "\n".join(rows_text)
                 file_data_text.append(df_text)
+            elif file and file.filename.endswith('.pdf'):  # PDFファイルの処理
+                text = ocr_pdf(file)
+                pdf_text = f"ファイル名: {file.filename}\n{text}"
+                file_data_text.append(pdf_text)
             else:
                 continue  # 不正なファイル形式の場合、処理をスキップ
 
@@ -123,7 +143,7 @@ def process_files_and_prompt():
 
         # Azure Search で関連するドキュメントを検索
         search_results = search_client.search(search_text=prompt, top=3)
-        relevant_docs = "\n".join([doc['chunk'] for doc in search_results])  # 'chunk' を使用
+        relevant_docs = "\n".join([doc['chunk'] for doc in search_results])
 
         # 最新のプロンプトに検索結果を追加
         input_data_with_search = f"以下のドキュメントに基づいて質問に答えてください：\n{relevant_docs}\n質問: {input_data}"
