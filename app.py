@@ -4,6 +4,8 @@ from flask import Flask, request, render_template, session
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 import pandas as pd
+from docx import Document
+from pptx import Presentation
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # セッションを管理するための秘密鍵
@@ -54,34 +56,34 @@ def process_files_and_prompt():
     file_data_text = []
     try:
         for file in files:
-            if file and file.filename.endswith('.xlsx'):  # ファイルが存在し、かつxlsx形式か確認
-                # 'openpyxl'エンジンを使用してExcelファイルを読み込む
+            if file and file.filename.endswith('.xlsx'):
+                # Excelファイルの処理
                 df = pd.read_excel(file, engine='openpyxl')
-
-                # 列名を取得して文字列化
-                columns = df.columns.tolist()
-                columns_text = " | ".join(columns)  # 列名を区切り文字で結合
-
-                # 各行のデータを行ごとに文字列化
-                rows_text = []
-                for index, row in df.iterrows():
-                    row_text = " | ".join([str(item) for item in row.tolist()])  # 各行のデータを区切り文字で結合
-                    rows_text.append(row_text)
-
-                # 列名と行データを連結
+                columns_text = " | ".join(df.columns.tolist())
+                rows_text = [" | ".join(map(str, row.tolist())) for index, row in df.iterrows()]
                 df_text = f"ファイル名: {file.filename}\n{columns_text}\n" + "\n".join(rows_text)
                 file_data_text.append(df_text)
-            else:
-                continue  # 不正なファイル形式の場合、処理をスキップ
 
-        # ファイルがある場合、内容を結合して送信するデータに追加
-        if file_data_text:
-            file_contents = "\n\n".join(file_data_text)
-            input_data = f"アップロードされたファイルの内容は次の通りです:\n{file_contents}\nプロンプト: {prompt}"
-        else:
-            # ファイルがない場合でも、プロンプトをそのまま使用してOpenAIにリクエストを送信
-            input_data = f"プロンプトのみが入力されました:\nプロンプト: {prompt}"
+            elif file and file.filename.endswith('.docx'):
+                # Wordファイルの処理
+                doc = Document(file)
+                doc_text = "\n".join([para.text for para in doc.paragraphs])
+                file_data_text.append(f"ファイル名: {file.filename}\n{doc_text}")
 
+            elif file and file.filename.endswith('.pptx'):
+                # PowerPointファイルの処理
+                prs = Presentation(file)
+                ppt_text = ""
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if shape.has_text_frame:
+                            ppt_text += shape.text + "\n"
+                file_data_text.append(f"ファイル名: {file.filename}\n{ppt_text}")
+
+        # ファイル内容を結合して送信するデータに追加
+        file_contents = "\n\n".join(file_data_text)
+        input_data = f"アップロードされたファイルの内容は次の通りです:\n{file_contents}\nプロンプト: {prompt}"
+        
         # Azure Search で関連するドキュメントを検索
         search_results = search_client.search(search_text=prompt, top=3)
         relevant_docs = "\n".join([doc['chunk'] for doc in search_results])  # 'chunk' を使用
@@ -96,7 +98,7 @@ def process_files_and_prompt():
         response = openai.ChatCompletion.create(
             engine=deployment_name,
             messages=messages,  # これまでの履歴も含めて送信
-            max_tokens=2000  # 応答のトークン数を増やす
+            max_tokens=2000
         )
 
         # 応答内容を取得し、履歴に追加
