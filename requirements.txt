@@ -6,5 +6,6 @@ azure-core>=1.28.0
 pandas
 openpyxl
 python-docx
+fpdf
 python-pptx
 pdfplumber
