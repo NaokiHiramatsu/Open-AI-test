@@ -5,3 +5,5 @@ azure-search-documents==11.4.0
 azure-core>=1.28.0
 pandas
 openpyxl
+python-docx
+python-pptx
