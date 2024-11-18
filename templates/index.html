@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EY Chat</title>
+    <title>ファイルアップロードとプロンプト</title>
     <style>
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background: #ffffff; /* 背景は白 */
-            color: #333; /* テキストは濃いグレー */
+            background: #ffffff; /* 背景を白に設定 */
+            color: #333; /* テキストを濃いグレーに */
         }
         .header {
             display: flex;
@@ -20,62 +20,52 @@
             border-bottom: 1px solid #ddd;
         }
         .header img {
-            height: 80px; /* ロゴを大きく */
-            margin-right: 15px;
+            height: 80px; /* ロゴの高さ */
+            margin-right: 15px; /* ヘッダー内の間隔 */
         }
         .header h1 {
-            font-size: 36px; /* EY Chatの文字を大きく */
-            color: #000; /* 黒字 */
+            font-size: 36px;
+            color: #ffcc00; /* 黄色基調 */
             margin: 0;
         }
         .chat-container {
-            max-width: 90%; /* 左右の余白を縮める */
-            margin: 20px auto;
-            padding: 20px;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 30px;
             background-color: #f9f9f9; /* 明るい背景色 */
-            border-radius: 10px;
+            border-radius: 15px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
         }
         .chat-log {
-            border: 1px solid #ccc;
+            border: 1px solid #444;
             padding: 15px;
-            max-height: 400px; /* 固定の高さ */
-            overflow-y: auto; /* スクロール可能にする */
+            max-height: 400px;
+            overflow-y: auto;
             margin-bottom: 20px;
             background-color: #fff; /* 白背景 */
             border-radius: 10px;
         }
-        .user-message {
-            background-color: #fff9d6; /* 薄い黄色 */
+        .user-message, .assistant-message {
             padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
             white-space: pre-wrap;
             font-size: 14px;
             line-height: 1.6;
-            color: #333;
+        }
+        .user-message {
+            background-color: #ffcc00; /* 黄色背景 */
+            color: #333; /* 濃いグレー文字 */
             text-align: right;
         }
         .assistant-message {
-            background-color: #f2f2f2; /* 薄い灰色 */
-            padding: 15px;
-            border-radius: 10px;
-            margin: 10px 0;
-            white-space: pre-wrap;
-            font-size: 14px;
-            line-height: 1.6;
-            color: #000; /* フォント黒 */
-        }
-        form {
-            margin-top: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end; /* 右寄せ配置 */
+            background-color: #333; /* 黒背景 */
+            color: #fff; /* 白文字 */
         }
         textarea {
             width: 100%;
-            height: 120px; /* 縦幅を小さく */
+            height: 150px;
             padding: 15px;
             font-size: 16px;
             margin-bottom: 15px;
@@ -91,6 +81,7 @@
             box-shadow: 0 0 5px rgba(255, 204, 0, 0.5);
         }
         input[type="file"] {
+            margin-bottom: 10px;
             padding: 10px;
             font-size: 14px;
             border: 1px solid #ccc;
@@ -98,7 +89,6 @@
             background-color: #fff;
             color: #333;
             cursor: pointer;
-            margin-bottom: 15px;
         }
         input[type="file"]:hover {
             background-color: #f0f0f0;
@@ -107,13 +97,12 @@
             padding: 12px 25px;
             font-size: 16px;
             font-weight: bold;
-            color: #000; /* フォント黒 */
-            background-color: #ffcc00; /* 黄色背景 */
+            color: #fff; /* ボタン文字を白に */
+            background-color: #ffcc00; /* ボタン背景を黄色に */
             border: none;
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s ease-in-out;
-            align-self: flex-end;
         }
         input[type="submit"]:hover {
             background-color: #e6b800; /* ホバー時の色 */
@@ -136,39 +125,43 @@
     </style>
 </head>
 <body>
+    <!-- ヘッダーにロゴを追加 -->
     <div class="header">
         <img src="{{ url_for('static', filename='images/EYlogo.png') }}" alt="ロゴ">
-        <h1>EY Chat</h1>
+        <h1>ファイルアップロードとプロンプト入力</h1>
     </div>
 
     <div class="chat-container">
-        <div class="chat-log" id="chat-log">
-            <div class="user-message">ユーザー: こんにちは、元気ですか？</div>
-            <div class="assistant-message" id="ai-message"></div>
-        </div>
-
         <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
-            <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
             <input type="file" name="files" id="files" multiple>
+            <div class="file-upload-info" id="file-upload-info"></div>
+            <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
             <input type="submit" value="送信">
         </form>
+
+        <!-- チャット履歴を表示 -->
+        <div class="chat-log">
+            {% if chat_history %}
+                {% for entry in chat_history %}
+                    <div class="user-message">ユーザー: {{ entry['user'] }}</div>
+                    <div class="assistant-message">生成AI: {{ entry['assistant'] | safe }}</div>
+                {% endfor %}
+            {% endif %}
+        </div>
     </div>
 
     <script>
-        const aiMessage = document.getElementById('ai-message');
-        const messageText = "元気です！今日はどのようなご用件でしょうか？";
-        let charIndex = 0;
+        const fileInput = document.getElementById('files');
+        const fileUploadInfo = document.getElementById('file-upload-info');
 
-        function typeEffect() {
-            if (charIndex < messageText.length) {
-                aiMessage.textContent += messageText[charIndex];
-                charIndex++;
-                setTimeout(typeEffect, 50); // 文字の入力速度
+        fileInput.addEventListener('change', function() {
+            const files = fileInput.files;
+            let fileInfo = '選択されたファイル: ';
+            for (let i = 0; i < files.length; i++) {
+                fileInfo += `<br>ファイル名: ${files[i].name}, ファイル形式: ${files[i].type}`;
             }
-        }
-
-        // ページ読み込み後にアニメーションを開始
-        window.onload = typeEffect;
+            fileUploadInfo.innerHTML = fileInfo ? fileInfo : '選択されたファイルがありません';
+        });
     </script>
 </body>
 </html>
