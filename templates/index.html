@@ -3,36 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ファイルアップロードとプロンプト</title>
+    <title>スタイリッシュなファイルアップロードとプロンプト</title>
     <style>
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
-            color: #333;
+            background: #111; /* 黒基調 */
+            color: #fff; /* 白文字 */
         }
         .chat-container {
             max-width: 800px;
             margin: 50px auto;
             padding: 30px;
-            background-color: #ffffff;
+            background-color: #222; /* 黒の濃度調整 */
             border-radius: 15px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
         }
         h1 {
             font-size: 24px;
             margin-bottom: 20px;
             text-align: center;
-            color: #2c3e50;
+            color: #ffcc00; /* 黄色基調 */
         }
         .chat-log {
-            border: 1px solid #ddd;
+            border: 1px solid #444;
             padding: 15px;
             max-height: 400px;
             overflow-y: auto;
             margin-bottom: 20px;
-            background-color: #f9fafb;
+            background-color: #333;
             border-radius: 10px;
         }
         .user-message, .assistant-message {
@@ -44,70 +45,77 @@
             line-height: 1.6;
         }
         .user-message {
-            background-color: #d1f7c4;
-            color: #2c3e50;
-            align-self: flex-end;
+            background-color: #444;
+            color: #ffcc00;
+            text-align: right;
         }
         .assistant-message {
-            background-color: #dfe8fc;
-            color: #1c3d5a;
+            background-color: #555;
+            color: #fff;
         }
         textarea {
-            width: 100%;
+            width: calc(100% - 40px);
             height: 150px;
             padding: 15px;
             font-size: 16px;
-            margin-bottom: 15px;
+            margin: 20px auto;
             border-radius: 10px;
-            border: 1px solid #ccc;
+            border: 1px solid #444;
+            background-color: #222;
+            color: #fff;
+            display: block;
             outline: none;
             transition: all 0.3s ease-in-out;
         }
         textarea:focus {
-            border-color: #007bff;
-            box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+            border-color: #ffcc00;
+            box-shadow: 0 0 5px rgba(255, 204, 0, 0.5);
         }
         input[type="file"] {
-            margin-bottom: 10px;
+            margin: 10px auto;
             padding: 10px;
             font-size: 14px;
-            border: 1px solid #ddd;
+            border: 1px solid #444;
             border-radius: 5px;
-            background-color: #f5f5f5;
+            background-color: #222;
+            color: #ffcc00;
             cursor: pointer;
+            display: block;
         }
         input[type="file"]:hover {
-            background-color: #eaeaea;
+            background-color: #333;
         }
         input[type="submit"] {
-            display: inline-block;
+            display: block;
+            margin: 20px auto;
             padding: 12px 25px;
             font-size: 16px;
             font-weight: bold;
-            color: #ffffff;
-            background-color: #007bff;
+            color: #222;
+            background-color: #ffcc00;
             border: none;
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s ease-in-out;
         }
         input[type="submit"]:hover {
-            background-color: #0056b3;
+            background-color: #e6b800;
         }
         .file-upload-info {
             margin-top: 10px;
             font-size: 14px;
-            color: #555;
+            color: #ffcc00;
+            text-align: center;
         }
         .chat-log::-webkit-scrollbar {
             width: 8px;
         }
         .chat-log::-webkit-scrollbar-thumb {
-            background-color: #007bff;
+            background-color: #ffcc00;
             border-radius: 5px;
         }
         .chat-log::-webkit-scrollbar-track {
-            background: #f1f1f1;
+            background: #222;
         }
     </style>
 </head>
@@ -116,9 +124,9 @@
         <h1>ファイルアップロードとプロンプト入力</h1>
 
         <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
-            <input type="file" name="files" id="files" multiple><br>
+            <input type="file" name="files" id="files" multiple>
             <div class="file-upload-info" id="file-upload-info"></div>
-            <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea><br>
+            <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
             <input type="submit" value="送信">
         </form>
 
