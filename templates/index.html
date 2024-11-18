@@ -20,11 +20,11 @@
             border-bottom: 1px solid #ddd;
         }
         .header img {
-            height: 80px; /* ロゴをさらに大きく */
+            height: 80px; /* ロゴを大きく */
             margin-right: 15px;
         }
         .header h1 {
-            font-size: 36px; /* EY Chatを二回り大きく */
+            font-size: 36px; /* EY Chatの文字を大きく */
             color: #000; /* 黒字 */
             margin: 0;
         }
@@ -68,16 +68,17 @@
             color: #000; /* フォント黒 */
         }
         form {
-            display: flex; /* 横並び */
-            align-items: flex-start;
-            gap: 10px; /* フォーム内の要素の間隔 */
             margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end; /* 右寄せ配置 */
         }
         textarea {
             width: 100%;
-            height: 120px; /* 縦幅を少し小さく */
+            height: 120px; /* 縦幅を小さく */
             padding: 15px;
             font-size: 16px;
+            margin-bottom: 15px;
             border-radius: 10px;
             border: 1px solid #ccc;
             background-color: #fff;
@@ -97,6 +98,7 @@
             background-color: #fff;
             color: #333;
             cursor: pointer;
+            margin-bottom: 15px;
         }
         input[type="file"]:hover {
             background-color: #f0f0f0;
@@ -111,27 +113,40 @@
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s ease-in-out;
+            align-self: flex-end;
         }
         input[type="submit"]:hover {
             background-color: #e6b800; /* ホバー時の色 */
         }
+        .file-upload-info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+        .chat-log::-webkit-scrollbar {
+            width: 8px;
+        }
+        .chat-log::-webkit-scrollbar-thumb {
+            background-color: #ffcc00;
+            border-radius: 5px;
+        }
+        .chat-log::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
     </style>
 </head>
 <body>
-    <!-- ヘッダーにロゴを追加 -->
     <div class="header">
         <img src="{{ url_for('static', filename='images/EYlogo.png') }}" alt="ロゴ">
         <h1>EY Chat</h1>
     </div>
 
     <div class="chat-container">
-        <!-- チャット履歴を表示 -->
         <div class="chat-log" id="chat-log">
             <div class="user-message">ユーザー: こんにちは、元気ですか？</div>
             <div class="assistant-message" id="ai-message"></div>
         </div>
 
-        <!-- 入力フォーム -->
         <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
             <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
             <input type="file" name="files" id="files" multiple>
@@ -148,7 +163,7 @@
             if (charIndex < messageText.length) {
                 aiMessage.textContent += messageText[charIndex];
                 charIndex++;
-                setTimeout(typeEffect, 50); // 文字が入力される速度
+                setTimeout(typeEffect, 50); // 文字の入力速度
             }
         }
 
