@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ファイルアップロードとプロンプト</title>
+    <title>EY Chat</title>
     <style>
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background: #ffffff; /* 背景を白に設定 */
-            color: #333; /* テキストを濃いグレーに */
+            background: #ffffff; /* 背景は白 */
+            color: #333; /* テキストは濃いグレー */
         }
         .header {
             display: flex;
@@ -20,48 +20,55 @@
             border-bottom: 1px solid #ddd;
         }
         .header img {
-            height: 50px; /* ロゴの高さ */
-            margin-right: 15px; /* ヘッダー内の間隔 */
+            height: 60px; /* ロゴを少し大きく */
+            margin-right: 15px;
         }
         .header h1 {
             font-size: 24px;
-            color: #ffcc00; /* 黄色基調 */
+            color: #000; /* 黒字 */
             margin: 0;
         }
         .chat-container {
-            max-width: 800px;
-            margin: 50px auto;
-            padding: 30px;
+            max-width: 90%; /* 左右の余白を縮める */
+            margin: 20px auto;
+            padding: 20px;
             background-color: #f9f9f9; /* 明るい背景色 */
-            border-radius: 15px;
+            border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
         }
         .chat-log {
-            border: 1px solid #444;
+            border: 1px solid #ccc;
             padding: 15px;
-            max-height: 400px;
-            overflow-y: auto;
+            max-height: 400px; /* 固定の高さ */
+            overflow-y: auto; /* スクロール可能にする */
             margin-bottom: 20px;
             background-color: #fff; /* 白背景 */
             border-radius: 10px;
         }
-        .user-message, .assistant-message {
+        .user-message {
+            background-color: #fff9d6; /* 薄い黄色 */
             padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
             white-space: pre-wrap;
             font-size: 14px;
             line-height: 1.6;
-        }
-        .user-message {
-            background-color: #ffcc00; /* 黄色背景 */
-            color: #333; /* 濃いグレー文字 */
+            color: #333;
             text-align: right;
         }
         .assistant-message {
-            background-color: #333; /* 黒背景 */
-            color: #fff; /* 白文字 */
+            background-color: #f2f2f2; /* 薄い灰色 */
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #000; /* フォント黒 */
+        }
+        form {
+            margin-top: 20px;
         }
         textarea {
             width: 100%;
@@ -97,8 +104,8 @@
             padding: 12px 25px;
             font-size: 16px;
             font-weight: bold;
-            color: #fff; /* ボタン文字を白に */
-            background-color: #ffcc00; /* ボタン背景を黄色に */
+            color: #000; /* フォント黒 */
+            background-color: #ffcc00; /* 黄色背景 */
             border: none;
             border-radius: 5px;
             cursor: pointer;
@@ -128,17 +135,10 @@
     <!-- ヘッダーにロゴを追加 -->
     <div class="header">
         <img src="{{ url_for('static', filename='images/EYlogo.png') }}" alt="ロゴ">
-        <h1>ファイルアップロードとプロンプト入力</h1>
+        <h1>EY Chat</h1>
     </div>
 
     <div class="chat-container">
-        <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
-            <input type="file" name="files" id="files" multiple>
-            <div class="file-upload-info" id="file-upload-info"></div>
-            <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
-            <input type="submit" value="送信">
-        </form>
-
         <!-- チャット履歴を表示 -->
         <div class="chat-log">
             {% if chat_history %}
@@ -148,6 +148,14 @@
                 {% endfor %}
             {% endif %}
         </div>
+
+        <!-- 入力フォーム -->
+        <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
+            <input type="file" name="files" id="files" multiple>
+            <div class="file-upload-info" id="file-upload-info"></div>
+            <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
+            <input type="submit" value="送信">
+        </form>
     </div>
 
     <script>
