@@ -9,9 +9,14 @@ from fpdf import FPDF
 from docx import Document
 from pptx import Presentation
 import tempfile
+import logging
+import shutil
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # セッションを管理するための秘密鍵
+
+# ログ設定
+logging.basicConfig(level=logging.DEBUG)
 
 # 環境変数からAPIキーやエンドポイントを取得
 openai.api_type = "azure"
@@ -25,7 +30,6 @@ search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
 search_service_key = os.getenv("AZURE_SEARCH_KEY")
 index_name = "vector-1730110777868"  # 使用するインデックス名を指定
 
-# SearchClient の設定
 search_client = SearchClient(
     endpoint=search_service_endpoint,
     index_name=index_name,
@@ -36,163 +40,110 @@ search_client = SearchClient(
 vision_subscription_key = os.getenv("VISION_API_KEY")
 vision_endpoint = os.getenv("VISION_ENDPOINT")
 
-# ホームページを表示するルート
+@app.before_request
+def initialize_session():
+    if 'chat_history' not in session:
+        session['chat_history'] = []
+
+@app.after_request
+def cleanup_temp_files(response):
+    temp_dir = tempfile.gettempdir()
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    return response
+
 @app.route('/')
 def index():
-    session.clear()  # ブラウザを閉じたらセッションをリセット
+    session.clear()
     return render_template('index.html', chat_history=[])
 
-# OCR機能を提供するルート
 @app.route('/ocr', methods=['POST'])
 def ocr_endpoint():
-    image_url = request.json.get("image_url")  # JSONデータから画像URLを取得
+    image_url = request.json.get("image_url")
     if not image_url:
         return jsonify({"error": "No image URL provided"}), 400
 
     try:
-        text = ocr_image(image_url)
+        text = ocr_image_with_retry(image_url)
         return jsonify({"text": text})
     except Exception as e:
+        logging.debug(f"OCR Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-def ocr_image(image_url):
-    """
-    Azure Computer Vision APIを使って画像のOCRを実行する関数
-    """
+def ocr_image_with_retry(image_url, retries=3):
     ocr_url = vision_endpoint + "/vision/v3.2/ocr"
     headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
     params = {"language": "ja", "detectOrientation": "true"}
     data = {"url": image_url}
 
-    # OCRリクエストを送信
-    response = requests.post(ocr_url, headers=headers, params=params, json=data)
-    response.raise_for_status()
+    for attempt in range(retries):
+        try:
+            response = requests.post(ocr_url, headers=headers, params=params, json=data)
+            response.raise_for_status()
+            ocr_results = response.json()
+            text_results = []
+            for region in ocr_results.get("regions", []):
+                for line in region.get("lines", []):
+                    line_text = " ".join([word["text"] for word in line["words"]])
+                    text_results.append(line_text)
+            return "\n".join(text_results)
+        except Exception as e:
+            if attempt < retries - 1:
+                continue
+            raise e
 
-    # 結果を取得し、テキスト部分を抽出
-    ocr_results = response.json()
-    text_results = []
-    for region in ocr_results.get("regions", []):
-        for line in region.get("lines", []):
-            line_text = " ".join([word["text"] for word in line["words"]])
-            text_results.append(line_text)
-    return "\n".join(text_results)
-
-def ocr_pdf(file):
-    """
-    PDFファイルをOCRにかけるための関数
-    """
-    ocr_url = vision_endpoint + "/vision/v3.2/read/analyze"
-    headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key, "Content-Type": "application/pdf"}
-
-    # OCRリクエストを送信
-    response = requests.post(ocr_url, headers=headers, data=file.read())
-    response.raise_for_status()
-
-    # 操作の完了を待機
-    operation_url = response.headers["Operation-Location"]
-    analysis = {}
-    while not "analyzeResult" in analysis:
-        response_final = requests.get(operation_url, headers={"Ocp-Apim-Subscription-Key": vision_subscription_key})
-        analysis = response_final.json()
-
-    # 結果を取得し、テキスト部分を抽出
-    text_results = []
-    for read_result in analysis["analyzeResult"]["readResults"]:
-        for line in read_result["lines"]:
-            text_results.append(line["text"])
-    return "\n".join(text_results)
-
-# ファイルとプロンプトを処理するルート
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
-    files = request.files.getlist('files')  # 複数ファイルの取得
+    files = request.files.getlist('files')
     prompt = request.form.get('prompt', '')
 
-    if 'chat_history' not in session:
-        session['chat_history'] = []  # チャット履歴を初期化
-
-    # チャット履歴を基にAIへ送信するメッセージを構成
-    messages = [{"role": "system", "content": "あなたは有能なアシスタントです。"}]
-    
-    # チャット履歴を追加
-    for entry in session['chat_history']:
-        messages.append({"role": "user", "content": entry['user']})
-        messages.append({"role": "assistant", "content": entry['assistant']})
-
-    # ファイルがアップロードされている場合の処理
-    file_data_text = []
     try:
-        for file in files:
-            if file and file.filename.endswith('.xlsx'):  # Excelファイルの処理
-                df = pd.read_excel(file, engine='openpyxl')
-                columns = df.columns.tolist()
-                columns_text = " | ".join(columns)
-                rows_text = [" | ".join([str(item) for item in row.tolist()]) for index, row in df.iterrows()]
-                df_text = f"ファイル名: {file.filename}\n{columns_text}\n" + "\n".join(rows_text)
-                file_data_text.append(df_text)
-            elif file and file.filename.endswith('.pdf'):  # PDFファイルの処理
-                text = ocr_pdf(file)
-                pdf_text = f"ファイル名: {file.filename}\n{text}"
-                file_data_text.append(pdf_text)
-            elif file and file.filename.endswith('.docx'):  # Wordファイルの処理
-                doc = Document(file)
-                word_text = "\n".join([para.text for para in doc.paragraphs])
-                word_text = f"ファイル名: {file.filename}\n{word_text}"
-                file_data_text.append(word_text)
-            elif file and file.filename.endswith('.pptx'):  # PPTファイルの処理
-                ppt = Presentation(file)
-                ppt_text = []
-                for slide in ppt.slides:
-                    for shape in slide.shapes:
-                        if hasattr(shape, "text"):
-                            ppt_text.append(shape.text)
-                ppt_text = f"ファイル名: {file.filename}\n" + "\n".join(ppt_text)
-                file_data_text.append(ppt_text)
-            else:
-                continue  # 不正なファイル形式の場合、処理をスキップ
+        file_data_text = [process_file(file) for file in files]
+        file_contents = "\n\n".join(file_data_text) if file_data_text else "アップロードされたファイルはありません。"
 
-        # ファイルがある場合、内容を結合して送信するデータに追加
-        if file_data_text:
-            file_contents = "\n\n".join(file_data_text)
-            input_data = f"アップロードされたファイルの内容は次の通りです:\n{file_contents}\nプロンプト: {prompt}"
-        else:
-            input_data = f"プロンプトのみが入力されました:\nプロンプト: {prompt}"
-
-        # Azure Search で関連するドキュメントを検索
+        input_data = f"アップロードされたファイルの内容は次の通りです:\n{file_contents}\nプロンプト: {prompt}"
         search_results = search_client.search(search_text=prompt, top=3)
         relevant_docs = "\n".join([doc['chunk'] for doc in search_results])
+        messages = [{"role": "system", "content": "あなたは有能なアシスタントです。"}]
+        messages.append({"role": "user", "content": f"以下のドキュメントに基づいて質問に答えてください：\n{relevant_docs}\n質問: {input_data}"})
 
-        # 最新のプロンプトに検索結果を追加
-        input_data_with_search = f"以下のドキュメントに基づいて質問に答えてください：\n{relevant_docs}\n質問: {input_data}"
-        messages.append({"role": "user", "content": input_data_with_search})
-
-        # AIにプロンプトとファイル内容を送信して応答を取得
         response = openai.ChatCompletion.create(
             engine=deployment_name,
             messages=messages,
             max_tokens=2000
         )
 
-        # 応答内容を取得し、履歴に追加
         response_content = response['choices'][0]['message']['content']
-        session['chat_history'].append({
-            'user': input_data,
-            'assistant': response_content
-        })
+        session['chat_history'].append({'user': input_data, 'assistant': response_content})
 
-        # 出力の必要性を判断し、出力が必要な場合はダウンロードリンクを生成
         download_link = determine_file_type_and_generate(response_content)
-        print("Download link:", download_link)  # デバッグ用
         if download_link:
             response_content += f"\n\n[こちらからダウンロード]({download_link}) できます。"
 
-        # 応答内容をコンソールに表示
-        print("Response content with link:", response_content)  # デバッグ用
         session['generated_content'] = response_content
         return render_template('index.html', chat_history=session['chat_history'])
-
     except Exception as e:
+        logging.debug(f"File Processing Error: {str(e)}")
         return f"エラーが発生しました: {str(e)}"
+
+def process_file(file):
+    if file.filename.endswith('.xlsx'):
+        df = pd.read_excel(file, engine='openpyxl')
+        columns_text = " | ".join(df.columns)
+        rows_text = [" | ".join(map(str, row)) for _, row in df.iterrows()]
+        return f"ファイル名: {file.filename}\n{columns_text}\n" + "\n".join(rows_text)
+    elif file.filename.endswith('.pdf'):
+        return f"ファイル名: {file.filename}\n{ocr_pdf(file)}"
+    elif file.filename.endswith('.docx'):
+        doc = Document(file)
+        return f"ファイル名: {file.filename}\n" + "\n".join([p.text for p in doc.paragraphs])
+    elif file.filename.endswith('.pptx'):
+        ppt = Presentation(file)
+        slides_text = [
+            shape.text for slide in ppt.slides for shape in slide.shapes if hasattr(shape, "text")
+        ]
+        return f"ファイル名: {file.filename}\n" + "\n".join(slides_text)
+    else:
+        return f"ファイル形式が対応していません: {file.filename}"
 
 def determine_file_type_and_generate(response_content):
     if "Excel" in response_content:
@@ -203,50 +154,43 @@ def determine_file_type_and_generate(response_content):
         return generate_file('word', response_content)
     elif "テキスト" in response_content or "txt" in response_content:
         return generate_file('txt', response_content)
-    else:
-        return None
+    return None
 
 def generate_file(file_type, content):
-    if file_type == 'txt':
-        temp_file_path = tempfile.mktemp(suffix=".txt")
-        with open(temp_file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        print("Generated TXT file at:", temp_file_path)  # デバッグ用
-        return url_for('download_file', file_path=temp_file_path)
-
-    elif file_type == 'pdf':
-        temp_pdf_path = tempfile.mktemp(suffix=".pdf")
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.multi_cell(0, 10, content)
-        pdf.output(temp_pdf_path)
-        print("Generated PDF file at:", temp_pdf_path)  # デバッグ用
-        return url_for('download_file', file_path=temp_pdf_path)
-
-    elif file_type == 'excel':
-        temp_excel_path = tempfile.mktemp(suffix=".xlsx")
-        df = pd.DataFrame({"Content": [content]})
-        df.to_excel(temp_excel_path, index=False)
-        print("Generated Excel file at:", temp_excel_path)  # デバッグ用
-        return url_for('download_file', file_path=temp_excel_path)
-
-    elif file_type == 'word':
-        temp_word_path = tempfile.mktemp(suffix=".docx")
-        doc = Document()
-        doc.add_heading('Generated Content', level=1)
-        doc.add_paragraph(content)
-        doc.save(temp_word_path)
-        print("Generated Word file at:", temp_word_path)  # デバッグ用
-        return url_for('download_file', file_path=temp_word_path)
+    try:
+        temp_dir = tempfile.mkdtemp()
+        if file_type == 'txt':
+            temp_path = os.path.join(temp_dir, "output.txt")
+            with open(temp_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+        elif file_type == 'pdf':
+            temp_path = os.path.join(temp_dir, "output.pdf")
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+            pdf.multi_cell(0, 10, content)
+            pdf.output(temp_path)
+        elif file_type == 'excel':
+            temp_path = os.path.join(temp_dir, "output.xlsx")
+            df = pd.DataFrame({"Content": [content]})
+            df.to_excel(temp_path, index=False)
+        elif file_type == 'word':
+            temp_path = os.path.join(temp_dir, "output.docx")
+            doc = Document()
+            doc.add_heading('Generated Content', level=1)
+            doc.add_paragraph(content)
+            doc.save(temp_path)
+        return url_for('download_file', file_path=temp_path)
+    except Exception as e:
+        logging.debug(f"File Generation Error: {str(e)}")
+        return None
 
 @app.route('/download_file')
 def download_file():
     file_path = request.args.get('file_path', None)
     if file_path and os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
-    else:
-        return "File not found.", 404
+    return "File not found.", 404
 
 if __name__ == '__main__':
     app.run(debug=True)
