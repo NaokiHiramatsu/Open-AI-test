@@ -1,12 +1,13 @@
 import openai
 import os
-from flask import Flask, request, jsonify, render_template, session, send_file, url_for, safe_join
+from flask import Flask, request, render_template, session, send_file, url_for, safe_join
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 import pandas as pd
-from fpdf import FPDF
 from docx import Document
 from pptx import Presentation
+import requests
+import tempfile
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -22,6 +23,9 @@ search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
 search_service_key = os.getenv("AZURE_SEARCH_KEY")
 index_name = "vector-1730110777868"
 
+vision_subscription_key = os.getenv("VISION_API_KEY")
+vision_endpoint = os.getenv("VISION_ENDPOINT")
+
 search_client = SearchClient(
     endpoint=search_service_endpoint,
     index_name=index_name,
@@ -34,38 +38,68 @@ if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
 # ファイル生成関数
-def generate_file(file_type, content, filename="output"):
+def generate_file(content, file_type="xlsx"):
     try:
-        file_path = os.path.join(output_dir, f"{filename}.{file_type}")
-        if file_type == 'xlsx':  # Excelファイル生成
+        temp_file_path = tempfile.mktemp(suffix=f".{file_type}")
+        if file_type == "xlsx":
             df = pd.DataFrame({"Content": [content]})
-            df.to_excel(file_path, index=False)
-        elif file_type == 'pdf':  # PDFファイル生成
+            df.to_excel(temp_file_path, index=False)
+        elif file_type == "pdf":
+            from fpdf import FPDF
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", size=12)
             pdf.multi_cell(0, 10, content)
-            pdf.output(file_path)
-        elif file_type == 'docx':  # Wordファイル生成
+            pdf.output(temp_file_path)
+        elif file_type == "docx":
             doc = Document()
-            doc.add_heading('Generated Content', level=1)
             doc.add_paragraph(content)
-            doc.save(file_path)
-        return file_path
+            doc.save(temp_file_path)
+        return temp_file_path
     except Exception as e:
         print(f"File generation failed: {e}")
         return None
 
+# OCR機能
+def ocr_image(image_url):
+    ocr_url = vision_endpoint + "/vision/v3.2/ocr"
+    headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
+    params = {"language": "ja", "detectOrientation": "true"}
+    data = {"url": image_url}
+
+    response = requests.post(ocr_url, headers=headers, params=params, json=data)
+    response.raise_for_status()
+    ocr_results = response.json()
+    text_results = []
+    for region in ocr_results.get("regions", []):
+        for line in region.get("lines", []):
+            line_text = " ".join([word["text"] for word in line["words"]])
+            text_results.append(line_text)
+    return "\n".join(text_results)
+
 @app.route('/')
 def index():
     session.clear()
-    return render_template('index.html', chat_history=[], download_link=None)
+    return render_template('index.html', chat_history=[])
+
+@app.route('/ocr', methods=['POST'])
+def ocr_endpoint():
+    image_url = request.json.get("image_url")
+    if not image_url:
+        return {"error": "No image URL provided"}, 400
+
+    try:
+        text = ocr_image(image_url)
+        return {"text": text}
+    except Exception as e:
+        return {"error": str(e)}, 500
 
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
     files = request.files.getlist('files')
     prompt = request.form.get('prompt', '')
-    download_requested = 'download' in request.form  # ダウンロード希望を確認
+
+    download_requested = "ダウンロード希望" in prompt
 
     if 'chat_history' not in session:
         session['chat_history'] = []
@@ -75,14 +109,11 @@ def process_files_and_prompt():
         messages.append({"role": "user", "content": entry['user']})
         messages.append({"role": "assistant", "content": entry['assistant']})
 
-    # ファイル処理
     file_data_text = []
     for file in files:
         if file.filename.endswith('.xlsx'):
             df = pd.read_excel(file, engine='openpyxl')
             file_data_text.append(df.to_csv(index=False))
-        elif file.filename.endswith('.pdf'):
-            file_data_text.append("PDF処理未実装")  # PDF処理の例
         elif file.filename.endswith('.docx'):
             doc = Document(file)
             file_data_text.append("\n".join([para.text for para in doc.paragraphs]))
@@ -95,17 +126,14 @@ def process_files_and_prompt():
                         ppt_text.append(shape.text)
             file_data_text.append("\n".join(ppt_text))
 
-    # ユーザー入力とファイル内容を統合
     file_content_combined = "\n\n".join(file_data_text)
     input_data = f"アップロードされたファイルの内容:\n{file_content_combined}\nプロンプト: {prompt}"
     messages.append({"role": "user", "content": input_data})
 
-    # Azure Cognitive Search連携
     search_results = search_client.search(search_text=prompt, top=3)
     relevant_docs = "\n".join([doc['chunk'] for doc in search_results])
     messages.append({"role": "user", "content": f"以下に基づいて回答してください:\n{relevant_docs}"})
 
-    # OpenAIへのリクエスト
     response = openai.ChatCompletion.create(
         engine=deployment_name,
         messages=messages,
@@ -113,16 +141,14 @@ def process_files_and_prompt():
     )
     response_content = response['choices'][0]['message']['content']
 
-    # ダウンロードリンクの生成（ダウンロード希望時のみ）
     download_url = None
     if download_requested:
-        file_path = generate_file('xlsx', response_content, filename="response")
+        file_path = generate_file(response_content)
         if file_path:
-            download_url = url_for('download_file', filename="response.xlsx", _external=True)
+            download_url = url_for('download_file', filename=os.path.basename(file_path), _external=True)
 
-    # チャット履歴に追加
-    session['chat_history'].append({'user': input_data, 'assistant': response_content})
-    return render_template('index.html', chat_history=session['chat_history'], download_link=download_url)
+    session['chat_history'].append({'user': input_data, 'assistant': response_content, 'download_url': download_url})
+    return render_template('index.html', chat_history=session['chat_history'])
 
 @app.route('/download/<filename>')
 def download_file(filename):
