@@ -7,7 +7,6 @@ import pandas as pd
 from fpdf import FPDF
 from docx import Document
 from pptx import Presentation
-import shutil
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -29,7 +28,7 @@ search_client = SearchClient(
     credential=AzureKeyCredential(search_service_key)
 )
 
-# ファイル保存用ディレクトリを定義
+# ファイル保存用ディレクトリ
 output_dir = os.path.join(os.getcwd(), "downloads")
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
@@ -60,12 +59,13 @@ def generate_file(file_type, content, filename="output"):
 @app.route('/')
 def index():
     session.clear()
-    return render_template('index.html', chat_history=[])
+    return render_template('index.html', chat_history=[], download_link=None)
 
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
     files = request.files.getlist('files')
     prompt = request.form.get('prompt', '')
+    download_requested = 'download' in request.form  # ダウンロード希望を確認
 
     if 'chat_history' not in session:
         session['chat_history'] = []
@@ -75,13 +75,14 @@ def process_files_and_prompt():
         messages.append({"role": "user", "content": entry['user']})
         messages.append({"role": "assistant", "content": entry['assistant']})
 
+    # ファイル処理
     file_data_text = []
     for file in files:
         if file.filename.endswith('.xlsx'):
             df = pd.read_excel(file, engine='openpyxl')
             file_data_text.append(df.to_csv(index=False))
         elif file.filename.endswith('.pdf'):
-            file_data_text.append("PDF処理未実装")  # 例として記載
+            file_data_text.append("PDF処理未実装")  # PDF処理の例
         elif file.filename.endswith('.docx'):
             doc = Document(file)
             file_data_text.append("\n".join([para.text for para in doc.paragraphs]))
@@ -94,14 +95,17 @@ def process_files_and_prompt():
                         ppt_text.append(shape.text)
             file_data_text.append("\n".join(ppt_text))
 
+    # ユーザー入力とファイル内容を統合
     file_content_combined = "\n\n".join(file_data_text)
     input_data = f"アップロードされたファイルの内容:\n{file_content_combined}\nプロンプト: {prompt}"
     messages.append({"role": "user", "content": input_data})
 
+    # Azure Cognitive Search連携
     search_results = search_client.search(search_text=prompt, top=3)
     relevant_docs = "\n".join([doc['chunk'] for doc in search_results])
     messages.append({"role": "user", "content": f"以下に基づいて回答してください:\n{relevant_docs}"})
 
+    # OpenAIへのリクエスト
     response = openai.ChatCompletion.create(
         engine=deployment_name,
         messages=messages,
@@ -109,14 +113,16 @@ def process_files_and_prompt():
     )
     response_content = response['choices'][0]['message']['content']
 
-    # ファイル生成とリンクの生成
-    file_path = generate_file('xlsx', response_content, filename="response")
-    if file_path:
-        download_url = url_for('download_file', filename="response.xlsx", _external=True)
-        response_content += f"\n\n<a href='{download_url}' download>こちらからダウンロードできます</a>"
+    # ダウンロードリンクの生成（ダウンロード希望時のみ）
+    download_url = None
+    if download_requested:
+        file_path = generate_file('xlsx', response_content, filename="response")
+        if file_path:
+            download_url = url_for('download_file', filename="response.xlsx", _external=True)
 
+    # チャット履歴に追加
     session['chat_history'].append({'user': input_data, 'assistant': response_content})
-    return render_template('index.html', chat_history=session['chat_history'])
+    return render_template('index.html', chat_history=session['chat_history'], download_link=download_url)
 
 @app.route('/download/<filename>')
 def download_file(filename):
