@@ -198,11 +198,11 @@ def generate_file(file_type, content):
 
         elif file_type == 'excel':
             temp_excel_path = tempfile.mktemp(suffix=".xlsx")
-            if isinstance(content, pd.DataFrame):
-                content.to_excel(temp_excel_path, index=False)
-            else:
-                df = pd.DataFrame({"Content": content.splitlines()})
-                df.to_excel(temp_excel_path, index=False)
+            data = [
+                {"Column1": "Sample", "Column2": 123, "Column3": "Data"}
+            ]  # 仮のデータ例
+            df = pd.DataFrame(data)
+            df.to_excel(temp_excel_path, index=False)
             return url_for('download_file', file_path=temp_excel_path)
 
         elif file_type == 'word':
