@@ -77,31 +77,6 @@ def ocr_image(image_url):
             text_results.append(line_text)
     return "\n".join(text_results)
 
-def ocr_pdf(file):
-    """
-    PDFファイルをOCRにかけるための関数
-    """
-    ocr_url = vision_endpoint + "/vision/v3.2/read/analyze"
-    headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key, "Content-Type": "application/pdf"}
-
-    # OCRリクエストを送信
-    response = requests.post(ocr_url, headers=headers, data=file.read())
-    response.raise_for_status()
-
-    # 操作の完了を待機
-    operation_url = response.headers["Operation-Location"]
-    analysis = {}
-    while not "analyzeResult" in analysis:
-        response_final = requests.get(operation_url, headers={"Ocp-Apim-Subscription-Key": vision_subscription_key})
-        analysis = response_final.json()
-
-    # 結果を取得し、テキスト部分を抽出
-    text_results = []
-    for read_result in analysis["analyzeResult"]["readResults"]:
-        for line in read_result["lines"]:
-            text_results.append(line["text"])
-    return "\n".join(text_results)
-
 # ファイルとプロンプトを処理するルート
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
@@ -182,12 +157,10 @@ def process_files_and_prompt():
 
         # 出力の必要性を判断し、出力が必要な場合はダウンロードリンクを生成
         download_link = determine_file_type_and_generate(response_content)
-        print("Download link:", download_link)  # デバッグ用
         if download_link:
             response_content += f"\n\n[こちらからダウンロード]({download_link}) できます。"
 
         # 応答内容をコンソールに表示
-        print("Response content with link:", response_content)  # デバッグ用
         session['generated_content'] = response_content
         return render_template('index.html', chat_history=session['chat_history'])
 
@@ -207,38 +180,42 @@ def determine_file_type_and_generate(response_content):
         return None
 
 def generate_file(file_type, content):
-    if file_type == 'txt':
-        temp_file_path = tempfile.mktemp(suffix=".txt")
-        with open(temp_file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        print("Generated TXT file at:", temp_file_path)  # デバッグ用
-        return url_for('download_file', file_path=temp_file_path)
+    try:
+        if file_type == 'txt':
+            temp_file_path = tempfile.mktemp(suffix=".txt")
+            with open(temp_file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return url_for('download_file', file_path=temp_file_path)
 
-    elif file_type == 'pdf':
-        temp_pdf_path = tempfile.mktemp(suffix=".pdf")
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.multi_cell(0, 10, content)
-        pdf.output(temp_pdf_path)
-        print("Generated PDF file at:", temp_pdf_path)  # デバッグ用
-        return url_for('download_file', file_path=temp_pdf_path)
+        elif file_type == 'pdf':
+            temp_pdf_path = tempfile.mktemp(suffix=".pdf")
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+            pdf.multi_cell(0, 10, content)
+            pdf.output(temp_pdf_path)
+            return url_for('download_file', file_path=temp_pdf_path)
 
-    elif file_type == 'excel':
-        temp_excel_path = tempfile.mktemp(suffix=".xlsx")
-        df = pd.DataFrame({"Content": [content]})
-        df.to_excel(temp_excel_path, index=False)
-        print("Generated Excel file at:", temp_excel_path)  # デバッグ用
-        return url_for('download_file', file_path=temp_excel_path)
+        elif file_type == 'excel':
+            temp_excel_path = tempfile.mktemp(suffix=".xlsx")
+            if isinstance(content, pd.DataFrame):
+                content.to_excel(temp_excel_path, index=False)
+            else:
+                df = pd.DataFrame({"Content": content.splitlines()})
+                df.to_excel(temp_excel_path, index=False)
+            return url_for('download_file', file_path=temp_excel_path)
 
-    elif file_type == 'word':
-        temp_word_path = tempfile.mktemp(suffix=".docx")
-        doc = Document()
-        doc.add_heading('Generated Content', level=1)
-        doc.add_paragraph(content)
-        doc.save(temp_word_path)
-        print("Generated Word file at:", temp_word_path)  # デバッグ用
-        return url_for('download_file', file_path=temp_word_path)
+        elif file_type == 'word':
+            temp_word_path = tempfile.mktemp(suffix=".docx")
+            doc = Document()
+            doc.add_heading('Generated Content', level=1)
+            doc.add_paragraph(content)
+            doc.save(temp_word_path)
+            return url_for('download_file', file_path=temp_word_path)
+
+    except Exception as e:
+        print(f"File generation error ({file_type}): {e}")
+        return None
 
 @app.route('/download_file')
 def download_file():
