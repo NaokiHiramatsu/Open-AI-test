@@ -7,7 +7,6 @@ import pandas as pd
 from fpdf import FPDF
 from docx import Document
 from pptx import Presentation
-import tempfile
 import shutil
 
 app = Flask(__name__)
@@ -30,20 +29,17 @@ search_client = SearchClient(
     credential=AzureKeyCredential(search_service_key)
 )
 
-# ファイル保存ディレクトリ
+# ファイル保存用ディレクトリを定義
 output_dir = os.path.join(os.getcwd(), "downloads")
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
-# ファイル生成用関数
+# ファイル生成関数
 def generate_file(file_type, content, filename="output"):
     try:
         file_path = os.path.join(output_dir, f"{filename}.{file_type}")
         if file_type == 'xlsx':  # Excelファイル生成
-            if isinstance(content, list):
-                df = pd.DataFrame(content)
-            else:
-                df = pd.DataFrame({"Content": [content]})
+            df = pd.DataFrame({"Content": [content]})
             df.to_excel(file_path, index=False)
         elif file_type == 'pdf':  # PDFファイル生成
             pdf = FPDF()
@@ -58,10 +54,9 @@ def generate_file(file_type, content, filename="output"):
             doc.save(file_path)
         return file_path
     except Exception as e:
-        print(f"File generation failed ({file_type}): {e}")
+        print(f"File generation failed: {e}")
         return None
 
-# ホームページ
 @app.route('/')
 def index():
     session.clear()
@@ -86,7 +81,7 @@ def process_files_and_prompt():
             df = pd.read_excel(file, engine='openpyxl')
             file_data_text.append(df.to_csv(index=False))
         elif file.filename.endswith('.pdf'):
-            file_data_text.append(ocr_pdf(file))
+            file_data_text.append("PDF処理未実装")  # 例として記載
         elif file.filename.endswith('.docx'):
             doc = Document(file)
             file_data_text.append("\n".join([para.text for para in doc.paragraphs]))
@@ -114,7 +109,7 @@ def process_files_and_prompt():
     )
     response_content = response['choices'][0]['message']['content']
 
-    # ファイル生成とダウンロードリンクの追加
+    # ファイル生成とリンクの生成
     file_path = generate_file('xlsx', response_content, filename="response")
     if file_path:
         download_url = url_for('download_file', filename="response.xlsx", _external=True)
