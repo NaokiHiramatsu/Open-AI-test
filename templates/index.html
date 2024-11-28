@@ -129,6 +129,9 @@
         .chat-log::-webkit-scrollbar-track {
             background: #f1f1f1;
         }
+        .download-link {
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -144,7 +147,12 @@
             {% if chat_history %}
                 {% for entry in chat_history %}
                     <div class="user-message">ユーザー: {{ entry['user'] }}</div>
-                    <div class="assistant-message">生成AI: {{ entry['assistant'] | safe }}</div>
+                    <div class="assistant-message">生成AI: {{ entry['assistant'] }}</div>
+                    {% if entry.download_url %}
+                        <div class="download-link">
+                            <a href="{{ entry.download_url }}" download>こちらからダウンロードできます</a>
+                        </div>
+                    {% endif %}
                 {% endfor %}
             {% endif %}
         </div>
@@ -154,15 +162,8 @@
             <input type="file" name="files" id="files" multiple>
             <div class="file-upload-info" id="file-upload-info"></div>
             <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
-            <button type="submit" name="action" value="process">送信</button>
-            <button type="submit" name="download" value="true">ダウンロード希望</button>
+            <input type="submit" value="送信">
         </form>
-
-        <!-- ダウンロードリンクを動的に表示 -->
-        {% if download_link %}
-            <p>ファイルをダウンロードするには以下のリンクをクリックしてください。</p>
-            <a href="{{ download_link }}" download>こちらからダウンロードできます</a>
-        {% endif %}
     </div>
 
     <script>
