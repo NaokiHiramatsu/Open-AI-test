@@ -8,6 +8,7 @@ from docx import Document
 from pptx import Presentation
 import requests
 import tempfile
+import re  # 正規表現を利用してダウンロード意図を判別
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -77,6 +78,18 @@ def ocr_image(image_url):
             text_results.append(line_text)
     return "\n".join(text_results)
 
+# ダウンロード希望を判定する関数
+def is_download_requested(prompt):
+    """
+    プロンプト内にダウンロードを希望する意図があるかを判定。
+    """
+    download_keywords = [
+        "ダウンロード", "保存", "エクスポート", "ファイルとして出力", 
+        "Excelで", "ファイルが欲しい", "出力したい", "保存したい"
+    ]
+    pattern = "|".join(download_keywords)
+    return bool(re.search(pattern, prompt, re.IGNORECASE))
+
 @app.route('/')
 def index():
     session.clear()
@@ -99,7 +112,8 @@ def process_files_and_prompt():
     files = request.files.getlist('files')
     prompt = request.form.get('prompt', '')
 
-    download_requested = "ダウンロード希望" in prompt
+    # ダウンロード希望の判定
+    download_requested = is_download_requested(prompt)
 
     if 'chat_history' not in session:
         session['chat_history'] = []
