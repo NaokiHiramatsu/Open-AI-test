@@ -95,10 +95,6 @@
             border-radius: 5px;
             background-color: #fff;
             color: #333;
-            cursor: pointer;
-        }
-        input[type="file"]:hover {
-            background-color: #f0f0f0;
         }
         input[type="submit"] {
             padding: 12px 25px;
@@ -109,10 +105,6 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            transition: background-color 0.3s ease-in-out;
-        }
-        input[type="submit"]:hover {
-            background-color: #e6b800;
         }
         .file-upload-info {
             margin-top: 10px;
@@ -129,35 +121,29 @@
         .chat-log::-webkit-scrollbar-track {
             background: #f1f1f1;
         }
-        .download-link {
-            margin-top: 10px;
-        }
     </style>
 </head>
 <body>
-    <!-- ヘッダーにロゴを追加 -->
     <div class="header">
         <img src="{{ url_for('static', filename='images/EYlogo.png') }}" alt="ロゴ">
         <h1>EY Chat</h1>
     </div>
 
     <div class="chat-container">
-        <!-- チャット履歴を表示 -->
         <div class="chat-log">
             {% if chat_history %}
                 {% for entry in chat_history %}
                     <div class="user-message">ユーザー: {{ entry['user'] }}</div>
-                    <div class="assistant-message">生成AI: {{ entry['assistant'] }}</div>
-                    {% if entry.download_url %}
-                        <div class="download-link">
-                            <a href="{{ entry.download_url }}" download>こちらからダウンロードできます</a>
-                        </div>
-                    {% endif %}
+                    <div class="assistant-message">
+                        生成AI: {{ entry['assistant'] | safe }}
+                        {% if entry['download_url'] %}
+                            <br><a href="{{ entry['download_url'] }}" target="_blank">[ファイルをダウンロード]</a>
+                        {% endif %}
+                    </div>
                 {% endfor %}
             {% endif %}
         </div>
 
-        <!-- 入力フォーム -->
         <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
             <input type="file" name="files" id="files" multiple>
             <div class="file-upload-info" id="file-upload-info"></div>
@@ -165,19 +151,5 @@
             <input type="submit" value="送信">
         </form>
     </div>
-
-    <script>
-        const fileInput = document.getElementById('files');
-        const fileUploadInfo = document.getElementById('file-upload-info');
-
-        fileInput.addEventListener('change', function() {
-            const files = fileInput.files;
-            let fileInfo = '選択されたファイル: ';
-            for (let i = 0; i < files.length; i++) {
-                fileInfo += `<br>ファイル名: ${files[i].name}, ファイル形式: ${files[i].type}`;
-            }
-            fileUploadInfo.innerHTML = fileInfo ? fileInfo : '選択されたファイルがありません';
-        });
-    </script>
 </body>
 </html>
