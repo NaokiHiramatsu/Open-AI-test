@@ -80,12 +80,6 @@
             border: 1px solid #ccc;
             background-color: #fff;
             color: #333;
-            outline: none;
-            transition: all 0.3s ease-in-out;
-        }
-        textarea:focus {
-            border-color: #ffcc00;
-            box-shadow: 0 0 5px rgba(255, 204, 0, 0.5);
         }
         input[type="file"] {
             margin-bottom: 10px;
@@ -94,7 +88,6 @@
             border: 1px solid #ccc;
             border-radius: 5px;
             background-color: #fff;
-            color: #333;
         }
         input[type="submit"] {
             padding: 12px 25px;
@@ -104,7 +97,6 @@
             background-color: #ffcc00;
             border: none;
             border-radius: 5px;
-            cursor: pointer;
         }
         .file-upload-info {
             margin-top: 10px;
@@ -146,7 +138,6 @@
 
         <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
             <input type="file" name="files" id="files" multiple>
-            <div class="file-upload-info" id="file-upload-info"></div>
             <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
             <input type="submit" value="送信">
         </form>
