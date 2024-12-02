@@ -6,9 +6,8 @@ from azure.core.credentials import AzureKeyCredential
 import pandas as pd
 from docx import Document
 from pptx import Presentation
-import requests
 import tempfile
-import re  # 正規表現を利用してダウンロード意図を判別
+import re
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -24,15 +23,6 @@ search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
 search_service_key = os.getenv("AZURE_SEARCH_KEY")
 index_name = "vector-1730110777868"
 
-vision_subscription_key = os.getenv("VISION_API_KEY")
-vision_endpoint = os.getenv("VISION_ENDPOINT")
-
-search_client = SearchClient(
-    endpoint=search_service_endpoint,
-    index_name=index_name,
-    credential=AzureKeyCredential(search_service_key)
-)
-
 # ファイル保存用ディレクトリ
 output_dir = os.path.join(os.getcwd(), "downloads")
 if not os.path.exists(output_dir):
@@ -41,7 +31,7 @@ if not os.path.exists(output_dir):
 # ファイル生成関数
 def generate_file(content, file_type="xlsx"):
     try:
-        temp_file_path = tempfile.mktemp(suffix=f".{file_type}")
+        temp_file_path = os.path.join(output_dir, f"generated_file.{file_type}")
         if file_type == "xlsx":
             df = pd.DataFrame({"Content": [content]})
             df.to_excel(temp_file_path, index=False)
@@ -80,13 +70,7 @@ def ocr_image(image_url):
 
 # ダウンロード希望を判定する関数
 def is_download_requested(prompt):
-    """
-    プロンプト内にダウンロードを希望する意図があるかを判定。
-    """
-    download_keywords = [
-        "ダウンロード", "保存", "エクスポート", "ファイルとして出力", 
-        "Excelで", "ファイルが欲しい", "出力したい", "保存したい"
-    ]
+    download_keywords = ["ダウンロード", "保存", "エクスポート", "ファイルとして出力", "Excelで", "ファイルが欲しい", "出力したい", "保存したい"]
     pattern = "|".join(download_keywords)
     return bool(re.search(pattern, prompt, re.IGNORECASE))
 
@@ -111,9 +95,6 @@ def ocr_endpoint():
 def process_files_and_prompt():
     files = request.files.getlist('files')
     prompt = request.form.get('prompt', '')
-
-    # ダウンロード希望の判定
-    download_requested = is_download_requested(prompt)
 
     if 'chat_history' not in session:
         session['chat_history'] = []
@@ -155,25 +136,22 @@ def process_files_and_prompt():
     )
     response_content = response['choices'][0]['message']['content']
 
+    # ダウンロードリンクの生成
     download_url = None
-    if download_requested:
-        file_path = generate_file(response_content)
+    if is_download_requested(prompt):
+        file_path = generate_file(response_content, file_type="xlsx")
         if file_path:
             download_url = url_for('download_file', filename=os.path.basename(file_path), _external=True)
 
-    session['chat_history'].append({'user': input_data, 'assistant': response_content, 'download_url': download_url})
+    session['chat_history'].append({'user': prompt, 'assistant': response_content, 'download_url': download_url})
     return render_template('index.html', chat_history=session['chat_history'])
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    try:
-        file_path = safe_join(output_dir, filename)
-        if os.path.exists(file_path):
-            return send_file(file_path, as_attachment=True)
-        else:
-            return "File not found.", 404
-    except Exception as e:
-        return f"Error while accessing file: {e}", 500
+    file_path = safe_join(output_dir, filename)
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True)
+    return "File not found.", 404
 
 if __name__ == '__main__':
     app.run(debug=True)
