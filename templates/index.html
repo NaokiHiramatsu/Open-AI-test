@@ -67,19 +67,20 @@
             margin: 0 auto;
         }
         textarea {
-            width: 100%;
+            width: calc(100% - 20px); /* 枠内で中央に配置、右側の飛び出しを調整 */
             height: 150px;
             padding: 15px;
             font-size: 18px;
             border: 1px solid #ccc;
             border-radius: 10px;
             background: #fff;
+            margin: 0 auto; /* 中央揃え */
         }
         .form-footer {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-top: 10px;
+            width: 100%;
         }
         input[type="file"] {
             flex: 1;
@@ -88,18 +89,19 @@
             border-radius: 5px;
             background: #fff;
             font-size: 16px;
-            max-width: 60%; /* ファイル選択エリアの幅を調整 */
+            max-width: 60%;
         }
         input[type="submit"] {
             padding: 10px 20px;
             font-size: 16px;
             font-weight: bold;
-            color: #000;
+            color: #000; /* 黒文字 */
             background: #ffcc00;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            max-width: 20%; /* 送信ボタンの幅を統一 */
+            max-width: 20%;
+            align-self: flex-end; /* 右端に揃える */
         }
         input[type="submit"]:hover {
             background: #e6b800;
