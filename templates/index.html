@@ -9,8 +9,8 @@
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background: #ffffff; /* 背景は白 */
-            color: #333; /* テキストは濃いグレー */
+            background: #ffffff;
+            color: #333;
         }
         .header {
             display: flex;
@@ -20,19 +20,21 @@
             border-bottom: 1px solid #ddd;
         }
         .header img {
-            height: 80px; /* ロゴのサイズ */
+            height: 40px;
             margin-right: 15px;
         }
         .header h1 {
-            font-size: 36px;
-            color: #000; /* 黒字 */
+            font-size: 24px;
+            font-weight: 700;
+            color: #333;
             margin: 0;
+            font-family: "Arial", sans-serif;
         }
         .chat-container {
-            max-width: 90%;
+            max-width: 800px;
             margin: 20px auto;
             padding: 20px;
-            background-color: #f9f9f9; /* 明るい背景色 */
+            background-color: #f9f9f9;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
@@ -40,14 +42,14 @@
         .chat-log {
             border: 1px solid #ccc;
             padding: 15px;
-            max-height: 400px; /* 固定の高さ */
-            overflow-y: auto; /* スクロール可能 */
+            max-height: 400px;
+            overflow-y: auto;
             margin-bottom: 20px;
-            background-color: #fff; /* 白背景 */
+            background-color: #fff;
             border-radius: 10px;
         }
         .user-message {
-            background-color: #fff9d6; /* 薄い黄色 */
+            background-color: #fff9d6;
             padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
@@ -58,21 +60,21 @@
             text-align: right;
         }
         .assistant-message {
-            background-color: #f2f2f2; /* 薄い灰色 */
+            background-color: #f2f2f2;
             padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
             white-space: pre-wrap;
             font-size: 14px;
             line-height: 1.6;
-            color: #000; /* フォント黒 */
+            color: #000;
         }
         form {
             margin-top: 20px;
         }
         textarea {
-            width: 100%;
-            height: 150px;
+            width: calc(100% - 30px);
+            max-width: 100%;
             padding: 15px;
             font-size: 16px;
             margin-bottom: 15px;
@@ -104,15 +106,15 @@
             padding: 12px 25px;
             font-size: 16px;
             font-weight: bold;
-            color: #000; /* フォント黒 */
-            background-color: #ffcc00; /* 黄色背景 */
+            color: #000;
+            background-color: #ffcc00;
             border: none;
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s ease-in-out;
         }
         input[type="submit"]:hover {
-            background-color: #e6b800; /* ホバー時の色 */
+            background-color: #e6b800;
         }
         .file-upload-info {
             margin-top: 10px;
@@ -132,24 +134,21 @@
     </style>
 </head>
 <body>
-    <!-- ヘッダーにロゴを追加 -->
     <div class="header">
         <img src="{{ url_for('static', filename='images/EYlogo.png') }}" alt="ロゴ">
-        <h1>EY Chat</h1>
+        <h1>ChatGPT 4o</h1>
     </div>
 
     <div class="chat-container">
-        <!-- チャット履歴を表示 -->
-        <div class="chat-log">
+        <div class="chat-log" id="chat-log">
             {% if chat_history %}
                 {% for entry in chat_history %}
                     <div class="user-message">ユーザー: {{ entry['user'] }}</div>
-                    <div class="assistant-message">生成AI: {{ entry['assistant'] | safe }}</div>
+                    <div class="assistant-message" data-typing>{{ entry['assistant'] | safe }}</div>
                 {% endfor %}
             {% endif %}
         </div>
 
-        <!-- 入力フォーム -->
         <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
             <input type="file" name="files" id="files" multiple>
             <div class="file-upload-info" id="file-upload-info"></div>
@@ -159,6 +158,26 @@
     </div>
 
     <script>
+        const chatLog = document.getElementById('chat-log');
+
+        // Function to simulate typing effect
+        function typeMessage(element, text) {
+            let i = 0;
+            const interval = setInterval(() => {
+                element.textContent += text[i];
+                i++;
+                if (i === text.length) clearInterval(interval);
+            }, 50);
+        }
+
+        // Apply typing effect to assistant messages
+        const assistantMessages = document.querySelectorAll('.assistant-message[data-typing]');
+        assistantMessages.forEach((message) => {
+            const text = message.textContent;
+            message.textContent = '';
+            typeMessage(message, text);
+        });
+
         const fileInput = document.getElementById('files');
         const fileUploadInfo = document.getElementById('file-upload-info');
 
