@@ -15,22 +15,22 @@
         .header {
             display: flex;
             align-items: center;
-            justify-content: center;
-            padding: 20px;
+            justify-content: flex-start; /* 左揃え */
+            padding: 20px 2%; /* 左右空白 */
             background: #ffffff;
             border-bottom: 1px solid #ddd;
         }
         .header img {
-            height: 50px;
-            margin-right: 10px;
+            height: 70px; /* ロゴを大きく */
+            margin-right: 20px;
         }
         .header h1 {
-            font-size: 24px;
+            font-size: 32px; /* タイトルを大きく */
             margin: 0;
             color: #000;
         }
         .container {
-            max-width: 800px;
+            max-width: calc(100% - 2cm); /* 左右の空白を約1cmに設定 */
             margin: 30px auto;
             padding: 20px;
             background: #ffffff;
@@ -42,28 +42,29 @@
         }
         .chat-log {
             border: 1px solid #ddd;
-            padding: 15px;
-            min-height: 400px; /* チャットエリアを大きく */
-            max-height: 600px; /* 最大高さ */
+            padding: 20px;
+            min-height: 500px; /* チャットエリアを大きく */
+            max-height: 600px;
             overflow-y: auto; /* スクロール可能 */
             background: #fff;
             border-radius: 10px;
+            font-size: 18px; /* テキストサイズを大きく */
         }
         .user-message {
             background-color: #fff9d6; /* 薄い黄色 */
-            padding: 10px;
+            padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
-            font-size: 14px;
+            font-size: 18px; /* 大きめのテキスト */
             color: #333;
             text-align: right;
         }
         .assistant-message {
             background-color: #f2f2f2; /* 薄い灰色 */
-            padding: 10px;
+            padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
-            font-size: 14px;
+            font-size: 18px; /* 大きめのテキスト */
             color: #000;
         }
         form {
@@ -73,29 +74,35 @@
         }
         textarea {
             width: 100%;
-            height: 100px;
-            padding: 10px;
-            font-size: 16px;
+            height: 150px;
+            padding: 15px;
+            font-size: 18px; /* 大きめのフォント */
             border: 1px solid #ccc;
             border-radius: 10px;
             background: #fff;
+        }
+        .form-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         input[type="file"] {
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
             background: #fff;
-            font-size: 14px;
+            font-size: 16px;
         }
         input[type="submit"] {
             padding: 10px 20px;
             font-size: 16px;
             font-weight: bold;
-            color: #fff;
-            background: #ffcc00;
+            color: #000; /* 黒文字 */
+            background: #ffcc00; /* 黄色背景 */
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            margin-left: auto; /* 右寄せ */
         }
         input[type="submit"]:hover {
             background: #e6b800;
@@ -124,9 +131,9 @@
         <!-- 入力フォーム -->
         <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
             <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
-            <input type="file" name="files" id="files" multiple>
-            <input type="submit" value="送信">
+            <div class="form-footer">
+                <input type="file" name="files" id="files" multiple>
+                <input type="submit" value="送信">
+            </div>
         </form>
     </div>
-</body>
-</html>
