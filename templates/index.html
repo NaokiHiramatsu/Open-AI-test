@@ -9,43 +9,40 @@
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background: #ffffff;
+            background: #f5f5f5;
             color: #333;
         }
         .header {
             display: flex;
             align-items: center;
-            padding: 10px 20px;
-            background-color: #f9f9f9;
+            justify-content: center;
+            padding: 20px;
+            background-color: #ffffff;
             border-bottom: 1px solid #ddd;
         }
-        .header img {
-            height: 40px;
-            margin-right: 15px;
-        }
         .header h1 {
-            font-size: 24px;
-            font-weight: 700;
+            font-size: 28px;
+            font-weight: 600;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
             color: #333;
-            margin: 0;
-            font-family: "Arial", sans-serif;
+            letter-spacing: 1px;
         }
         .chat-container {
-            max-width: 800px;
-            margin: 20px auto;
+            max-width: 1000px;
+            margin: 30px auto;
             padding: 20px;
-            background-color: #f9f9f9;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background-color: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
         }
         .chat-log {
             border: 1px solid #ccc;
-            padding: 15px;
-            max-height: 400px;
+            padding: 20px;
+            max-height: 500px;
             overflow-y: auto;
             margin-bottom: 20px;
-            background-color: #fff;
+            background-color: #f9f9f9;
             border-radius: 10px;
         }
         .user-message {
@@ -54,33 +51,37 @@
             border-radius: 10px;
             margin: 10px 0;
             white-space: pre-wrap;
-            font-size: 14px;
+            font-size: 16px;
             line-height: 1.6;
-            color: #333;
             text-align: right;
         }
         .assistant-message {
             background-color: #f2f2f2;
-            padding: 15px;
+            padding: 20px;
             border-radius: 10px;
-            margin: 10px 0;
+            margin: 15px 0;
             white-space: pre-wrap;
-            font-size: 14px;
-            line-height: 1.6;
-            color: #000;
+            font-size: 16px;
+            line-height: 1.8;
+        }
+        .assistant-message.default {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #555;
         }
         form {
-            margin-top: 20px;
+            margin-top: 30px;
         }
         textarea {
-            width: calc(100% - 30px);
-            max-width: 100%;
+            width: 100%;
+            height: 200px;
             padding: 15px;
             font-size: 16px;
             margin-bottom: 15px;
             border-radius: 10px;
             border: 1px solid #ccc;
-            background-color: #fff;
+            background-color: #ffffff;
             color: #333;
             outline: none;
             transition: all 0.3s ease-in-out;
@@ -95,60 +96,51 @@
             font-size: 14px;
             border: 1px solid #ccc;
             border-radius: 5px;
-            background-color: #fff;
+            background-color: #ffffff;
             color: #333;
             cursor: pointer;
         }
-        input[type="file"]:hover {
-            background-color: #f0f0f0;
-        }
         input[type="submit"] {
-            padding: 12px 25px;
+            padding: 15px 30px;
             font-size: 16px;
             font-weight: bold;
-            color: #000;
-            background-color: #ffcc00;
+            color: #ffffff;
+            background-color: #0078d4;
             border: none;
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s ease-in-out;
         }
         input[type="submit"]:hover {
-            background-color: #e6b800;
+            background-color: #005bb5;
         }
         .file-upload-info {
             margin-top: 10px;
             font-size: 14px;
             color: #555;
         }
-        .chat-log::-webkit-scrollbar {
-            width: 8px;
-        }
-        .chat-log::-webkit-scrollbar-thumb {
-            background-color: #ffcc00;
-            border-radius: 5px;
-        }
-        .chat-log::-webkit-scrollbar-track {
-            background: #f1f1f1;
-        }
     </style>
 </head>
 <body>
+    <!-- ヘッダー -->
     <div class="header">
-        <img src="{{ url_for('static', filename='images/EYlogo.png') }}" alt="ロゴ">
-        <h1>ChatGPT 4o</h1>
+        <h1>EY Chat</h1>
     </div>
 
+    <!-- チャットコンテナ -->
     <div class="chat-container">
         <div class="chat-log" id="chat-log">
+            <!-- デフォルトメッセージ -->
+            <div class="assistant-message default">お手伝いできることはありますか？</div>
             {% if chat_history %}
                 {% for entry in chat_history %}
                     <div class="user-message">ユーザー: {{ entry['user'] }}</div>
-                    <div class="assistant-message" data-typing>{{ entry['assistant'] | safe }}</div>
+                    <div class="assistant-message">{{ entry['assistant'] | safe }}</div>
                 {% endfor %}
             {% endif %}
         </div>
 
+        <!-- 入力フォーム -->
         <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
             <input type="file" name="files" id="files" multiple>
             <div class="file-upload-info" id="file-upload-info"></div>
@@ -158,26 +150,6 @@
     </div>
 
     <script>
-        const chatLog = document.getElementById('chat-log');
-
-        // Function to simulate typing effect
-        function typeMessage(element, text) {
-            let i = 0;
-            const interval = setInterval(() => {
-                element.textContent += text[i];
-                i++;
-                if (i === text.length) clearInterval(interval);
-            }, 50);
-        }
-
-        // Apply typing effect to assistant messages
-        const assistantMessages = document.querySelectorAll('.assistant-message[data-typing]');
-        assistantMessages.forEach((message) => {
-            const text = message.textContent;
-            message.textContent = '';
-            typeMessage(message, text);
-        });
-
         const fileInput = document.getElementById('files');
         const fileUploadInfo = document.getElementById('file-upload-info');
 
