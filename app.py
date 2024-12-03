@@ -1,11 +1,10 @@
 import openai
 import os
-from flask import Flask, request, jsonify, render_template, session, send_file, url_for
+from flask import Flask, request, jsonify, render_template, session, send_file
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 import requests
 import pandas as pd
-from fpdf import FPDF
 from docx import Document
 from pptx import Presentation
 import tempfile
@@ -77,24 +76,6 @@ def ocr_image(image_url):
             text_results.append(line_text)
     return "\n".join(text_results)
 
-# ファイル出力用のルート
-@app.route('/download_output', methods=['POST'])
-def download_output():
-    try:
-        prompt = request.form.get('prompt', '')
-        response_content = session.get('response_content', 'No response available')
-        
-        # 一時ファイルを生成して内容を保存
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as temp_file:
-            temp_file.write(f"プロンプト:\n{prompt}\n\n応答:\n{response_content}".encode('utf-8'))
-            temp_file_path = temp_file.name
-
-        # クライアントにファイルを送信
-        return send_file(temp_file_path, as_attachment=True, download_name="output.txt")
-
-    except Exception as e:
-        return f"ファイルの出力中にエラーが発生しました: {str(e)}"
-
 # ファイルとプロンプトを処理するルート
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
@@ -119,39 +100,23 @@ def process_files_and_prompt():
             if file and file.filename.endswith('.xlsx'):  # Excelファイルの処理
                 df = pd.read_excel(file, engine='openpyxl')
                 columns = df.columns.tolist()
-                columns_text = " | ".join(columns)
-                rows_text = [" | ".join([str(item) for item in row.tolist()]) for index, row in df.iterrows()]
-                df_text = f"ファイル名: {file.filename}\n{columns_text}\n" + "\n".join(rows_text)
+                rows_text = df.to_string(index=False)
+                df_text = f"ファイル名: {file.filename}\n列: {columns}\n内容:\n{rows_text}"
                 file_data_text.append(df_text)
-            elif file and file.filename.endswith('.pdf'):  # PDFファイルの処理
-                text = ocr_image(file)
-                pdf_text = f"ファイル名: {file.filename}\n{text}"
-                file_data_text.append(pdf_text)
-            elif file and file.filename.endswith('.docx'):  # Wordファイルの処理
-                doc = Document(file)
-                word_text = "\n".join([para.text for para in doc.paragraphs])
-                word_text = f"ファイル名: {file.filename}\n{word_text}"
-                file_data_text.append(word_text)
-            elif file and file.filename.endswith('.pptx'):  # PPTファイルの処理
-                ppt = Presentation(file)
-                ppt_text = []
-                for slide in ppt.slides:
-                    for shape in slide.shapes:
-                        if hasattr(shape, "text"):
-                            ppt_text.append(shape.text)
-                ppt_text = f"ファイル名: {file.filename}\n" + "\n".join(ppt_text)
-                file_data_text.append(ppt_text)
-            else:
-                continue  # 不正なファイル形式の場合、処理をスキップ
 
         # ファイルがある場合、内容を結合して送信するデータに追加
-        if file_data_text:
-            file_contents = "\n\n".join(file_data_text)
-            input_data = f"アップロードされたファイルの内容は次の通りです:\n{file_contents}\nプロンプト: {prompt}"
-        else:
-            input_data = f"プロンプトのみが入力されました:\nプロンプト: {prompt}"
+        file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
+        input_data = f"アップロードされたファイル内容:\n{file_contents}\nプロンプト:\n{prompt}"
 
-        # AIにプロンプトとファイル内容を送信して応答を取得
+        # Azure Cognitive Search で関連するドキュメントを検索
+        search_results = search_client.search(search_text=prompt, top=3)
+        relevant_docs = "\n".join([doc['chunk'] for doc in search_results])
+
+        # 検索結果をプロンプトに追加
+        input_data_with_search = f"{input_data}\n\n関連ドキュメント:\n{relevant_docs}"
+        messages.append({"role": "user", "content": input_data_with_search})
+
+        # AIにプロンプトを送信
         response = openai.ChatCompletion.create(
             engine=deployment_name,
             messages=messages,
@@ -162,7 +127,7 @@ def process_files_and_prompt():
         response_content = response['choices'][0]['message']['content']
         session['response_content'] = response_content  # ファイル出力用にセッションへ保存
         session['chat_history'].append({
-            'user': input_data,
+            'user': input_data_with_search,
             'assistant': response_content
         })
 
@@ -170,6 +135,24 @@ def process_files_and_prompt():
 
     except Exception as e:
         return f"エラーが発生しました: {str(e)}"
+
+# ファイル出力用のルート
+@app.route('/download_output', methods=['POST'])
+def download_output():
+    try:
+        response_content = session.get('response_content', 'No response available')
+        prompt = request.form.get('prompt', '')
+
+        # 一時ファイルを生成して内容を保存
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as temp_file:
+            temp_file.write(f"プロンプト:\n{prompt}\n\n応答:\n{response_content}".encode('utf-8'))
+            temp_file_path = temp_file.name
+
+        # クライアントにファイルを送信
+        return send_file(temp_file_path, as_attachment=True, download_name="output.txt")
+
+    except Exception as e:
+        return f"ファイル出力中にエラーが発生しました: {str(e)}"
 
 if __name__ == '__main__':
     app.run(debug=True)
