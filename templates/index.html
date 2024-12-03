@@ -30,7 +30,7 @@
             color: #000;
         }
         .container {
-            max-width: calc(100% - 2cm); /* 左右の空白を約1cmに設定 */
+            max-width: calc(100% - 6cm); /* 左右の空白を3cmずつ設定 */
             margin: 30px auto;
             padding: 20px;
             background: #ffffff;
@@ -75,21 +75,16 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
+            align-items: center; /* 中央揃え */
         }
         textarea {
             width: calc(100% - 8cm); /* 横幅を4cmずつ狭める */
             height: 120px;
-            margin: 0 auto;
             padding: 15px;
             font-size: 16px;
             border: 1px solid #ccc;
             border-radius: 10px;
             background: #fff;
-        }
-        .form-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
         input[type="file"] {
             padding: 10px;
@@ -136,10 +131,8 @@
         <div class="form-container">
             <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
                 <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
-                <div class="form-footer">
-                    <input type="file" name="files" id="files" multiple>
-                    <input type="submit" value="送信">
-                </div>
+                <input type="file" name="files" id="files" multiple>
+                <input type="submit" value="送信">
             </form>
         </div>
     </div>
