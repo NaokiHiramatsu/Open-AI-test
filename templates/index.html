@@ -81,34 +81,34 @@
         .form-container {
             background: #f0f0f0; /* 指示文・ファイル・送信ボタン枠の背景色 */
             border-radius: 10px;
-            padding: 15px; /* 縦の長さを縮小 */
+            padding: 20px; /* 縦の長さを縮小 */
             border: 1px solid #ddd;
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            width: 80%; /* フォーム全体を少し小さく */
+            gap: 15px;
+            width: 80%; /* 背景枠の幅 */
             margin: 0 auto; /* 中央揃え */
         }
         textarea {
-            width: 90%; /* 枠内で左右対称に調整 */
-            height: 100px; /* 高さを縮小 */
+            width: 90%; /* 背景枠内で中央に配置 */
+            height: 120px; /* 縦の長さを少し拡大 */
             padding: 10px;
-            font-size: 18px; /* フォントサイズを大きく */
+            font-size: 18px;
             border: 1px solid #ccc;
             border-radius: 10px;
             background: #fff;
-            margin: 0 auto; /* 完全な左右揃え */
+            margin: 0 auto; /* 中央揃え */
         }
         .form-footer {
             display: flex;
             justify-content: space-between;
             align-items: center;
             width: 90%; /* 背景枠の幅に合わせる */
-            margin: 0 auto; /* 完全に中央揃え */
+            margin: 0 auto;
         }
         input[type="file"] {
-            flex: 1; /* ファイル選択エリアを広げる */
-            max-width: 45%; /* 少し左に寄せる */
+            flex: 1;
+            max-width: 45%; /* 指示入力エリアと左揃え */
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
@@ -124,8 +124,8 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            max-width: 100px; /* 右端に揃え */
-            margin-right: 5%; /* 指示文と揃える */
+            max-width: 100px;
+            align-self: flex-end; /* 指示入力エリアの右に揃える */
         }
         input[type="submit"]:hover {
             background: #e6b800;
