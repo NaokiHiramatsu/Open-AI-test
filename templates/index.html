@@ -55,6 +55,29 @@
             border-radius: 10px;
             font-size: 18px;
         }
+        .user-message {
+            background-color: #fff9d6; /* ユーザーの薄い黄色 */
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            font-size: 18px;
+            color: #333;
+            text-align: right;
+            width: fit-content;
+            max-width: 70%;
+            margin-left: auto;
+        }
+        .assistant-message {
+            background-color: #f2f2f2; /* AIの薄い灰色 */
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            font-size: 18px;
+            color: #000;
+            text-align: left;
+            width: fit-content;
+            max-width: 70%;
+        }
         .form-container {
             background: #f0f0f0;
             border-radius: 10px;
@@ -67,14 +90,14 @@
             margin: 0 auto;
         }
         textarea {
-            width: calc(100% - 20px); /* 枠内で中央に配置、右側の飛び出しを調整 */
+            width: calc(100% - 20px); /* 枠内で中央に配置 */
             height: 150px;
             padding: 15px;
             font-size: 18px;
             border: 1px solid #ccc;
             border-radius: 10px;
             background: #fff;
-            margin: 0 auto; /* 中央揃え */
+            margin: 0 auto;
         }
         .form-footer {
             display: flex;
@@ -95,13 +118,13 @@
             padding: 10px 20px;
             font-size: 16px;
             font-weight: bold;
-            color: #000; /* 黒文字 */
+            color: #000;
             background: #ffcc00;
             border: none;
             border-radius: 5px;
             cursor: pointer;
             max-width: 20%;
-            align-self: flex-end; /* 右端に揃える */
+            align-self: flex-end;
         }
         input[type="submit"]:hover {
             background: #e6b800;
@@ -109,15 +132,11 @@
     </style>
 </head>
 <body>
-    <!-- ヘッダー -->
     <div class="header">
         <img src="{{ url_for('static', filename='images/EYlogo.png') }}" alt="ロゴ">
         <h1>EY Chat</h1>
     </div>
-
-    <!-- メインコンテナ -->
     <div class="container">
-        <!-- チャットログ -->
         <div class="chat-log">
             {% if chat_history %}
                 {% for entry in chat_history %}
@@ -126,8 +145,6 @@
                 {% endfor %}
             {% endif %}
         </div>
-
-        <!-- 入力フォーム -->
         <div class="form-container">
             <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
                 <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
