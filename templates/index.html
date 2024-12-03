@@ -48,14 +48,6 @@
             border-radius: 10px;
             position: relative;
         }
-        .chat-log::before {
-            content: "お手伝いできることはありますか？";
-            display: block;
-            font-size: 18px;
-            font-weight: bold;
-            color: #666;
-            padding-bottom: 10px;
-        }
         .user-message {
             background-color: #fff9d6;
             padding: 15px;
@@ -149,41 +141,45 @@
 
     <div class="chat-container">
         <div class="chat-log" id="chat-log">
-            {% if chat_history %}
-                {% for entry in chat_history %}
-                    <div class="user-message">ユーザー: {{ entry['user'] }}</div>
-                    <div class="assistant-message">生成AI: {{ entry['assistant'] | safe }}</div>
-                {% endfor %}
-            {% endif %}
+            <div id="default-message" class="assistant-message">お手伝いできることはありますか？</div>
         </div>
 
-        <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
+        <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data" onsubmit="clearDefaultMessage()">
             <input type="file" name="files" id="files" multiple>
             <div class="file-upload-info" id="file-upload-info"></div>
-            <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください" oninput="clearDefaultMessage()"></textarea>
+            <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください" onfocus="clearDefaultMessage()"></textarea>
             <input type="submit" value="送信">
         </form>
     </div>
 
     <script>
-        const fileInput = document.getElementById('files');
-        const fileUploadInfo = document.getElementById('file-upload-info');
         const chatLog = document.getElementById('chat-log');
-        const promptBox = document.getElementById('prompt');
-
-        fileInput.addEventListener('change', function () {
-            const files = fileInput.files;
-            let fileInfo = '選択されたファイル: ';
-            for (let i = 0; i < files.length; i++) {
-                fileInfo += `<br>ファイル名: ${files[i].name}, ファイル形式: ${files[i].type}`;
-            }
-            fileUploadInfo.innerHTML = fileInfo ? fileInfo : '選択されたファイルがありません';
-        });
+        const defaultMessage = document.getElementById('default-message');
 
         function clearDefaultMessage() {
-            if (chatLog.firstChild && chatLog.firstChild.nodeType === Node.ELEMENT_NODE) {
-                chatLog.firstChild.remove();
+            if (defaultMessage) {
+                defaultMessage.remove();
             }
+        }
+
+        function typeText(element, text) {
+            let index = 0;
+            const interval = setInterval(() => {
+                if (index < text.length) {
+                    element.innerHTML += text.charAt(index);
+                    index++;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 50); // 一文字ずつ表示する速度
+        }
+
+        // 生成AIの返答を一文字ずつ描画する関数
+        function displayAIResponse(text) {
+            const responseElement = document.createElement('div');
+            responseElement.classList.add('assistant-message');
+            chatLog.appendChild(responseElement);
+            typeText(responseElement, text);
         }
     </script>
 </body>
