@@ -79,7 +79,7 @@
             margin: 0 auto; /* 中央揃え */
         }
         textarea {
-            width: 100%;
+            width: 100%; /* 枠内で左右対称 */
             height: 150px;
             padding: 15px;
             font-size: 18px; /* フォントサイズを大きく */
@@ -87,7 +87,15 @@
             border-radius: 10px;
             background: #fff;
         }
+        .form-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%; /* 背景枠の幅に合わせる */
+        }
         input[type="file"] {
+            flex: 1; /* ファイル選択エリアを広げる */
+            max-width: 70%; /* 全体のバランス調整 */
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
@@ -103,7 +111,7 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            align-self: flex-end; /* 右下配置 */
+            max-width: 100px; /* 右端に揃え */
         }
         input[type="submit"]:hover {
             background: #e6b800;
@@ -133,8 +141,10 @@
         <div class="form-container">
             <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
                 <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
-                <input type="file" name="files" id="files" multiple>
-                <input type="submit" value="送信">
+                <div class="form-footer">
+                    <input type="file" name="files" id="files" multiple>
+                    <input type="submit" value="送信">
+                </div>
             </form>
         </div>
     </div>
