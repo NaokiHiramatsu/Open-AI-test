@@ -77,6 +77,24 @@ def ocr_image(image_url):
             text_results.append(line_text)
     return "\n".join(text_results)
 
+# ファイル出力用のルート
+@app.route('/download_output', methods=['POST'])
+def download_output():
+    try:
+        prompt = request.form.get('prompt', '')
+        response_content = session.get('response_content', 'No response available')
+        
+        # 一時ファイルを生成して内容を保存
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as temp_file:
+            temp_file.write(f"プロンプト:\n{prompt}\n\n応答:\n{response_content}".encode('utf-8'))
+            temp_file_path = temp_file.name
+
+        # クライアントにファイルを送信
+        return send_file(temp_file_path, as_attachment=True, download_name="output.txt")
+
+    except Exception as e:
+        return f"ファイルの出力中にエラーが発生しました: {str(e)}"
+
 # ファイルとプロンプトを処理するルート
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
@@ -106,7 +124,7 @@ def process_files_and_prompt():
                 df_text = f"ファイル名: {file.filename}\n{columns_text}\n" + "\n".join(rows_text)
                 file_data_text.append(df_text)
             elif file and file.filename.endswith('.pdf'):  # PDFファイルの処理
-                text = ocr_pdf(file)
+                text = ocr_image(file)
                 pdf_text = f"ファイル名: {file.filename}\n{text}"
                 file_data_text.append(pdf_text)
             elif file and file.filename.endswith('.docx'):  # Wordファイルの処理
@@ -133,14 +151,6 @@ def process_files_and_prompt():
         else:
             input_data = f"プロンプトのみが入力されました:\nプロンプト: {prompt}"
 
-        # Azure Search で関連するドキュメントを検索
-        search_results = search_client.search(search_text=prompt, top=3)
-        relevant_docs = "\n".join([doc['chunk'] for doc in search_results])
-
-        # 最新のプロンプトに検索結果を追加
-        input_data_with_search = f"以下のドキュメントに基づいて質問に答えてください：\n{relevant_docs}\n質問: {input_data}"
-        messages.append({"role": "user", "content": input_data_with_search})
-
         # AIにプロンプトとファイル内容を送信して応答を取得
         response = openai.ChatCompletion.create(
             engine=deployment_name,
@@ -150,6 +160,7 @@ def process_files_and_prompt():
 
         # 応答内容を取得し、履歴に追加
         response_content = response['choices'][0]['message']['content']
+        session['response_content'] = response_content  # ファイル出力用にセッションへ保存
         session['chat_history'].append({
             'user': input_data,
             'assistant': response_content
