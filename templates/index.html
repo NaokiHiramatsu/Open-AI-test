@@ -9,8 +9,8 @@
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background: #ffffff; /* 背景は白 */
-            color: #333; /* テキストは濃いグレー */
+            background: #ffffff;
+            color: #333;
         }
         .header {
             display: flex;
@@ -20,21 +20,20 @@
             border-bottom: 1px solid #ddd;
         }
         .header img {
-            height: 80px; /* ロゴのサイズ */
+            height: 80px;
             margin-right: 15px;
         }
         .header h1 {
             font-size: 36px;
             font-weight: bold;
-            color: #000; /* 黒字 */
+            color: #000;
             margin: 0;
-            font-family: 'Arial', sans-serif;
         }
         .chat-container {
             max-width: 80%;
-            margin: 40px auto;
+            margin: 20px auto;
             padding: 20px;
-            background-color: #f9f9f9; /* 明るい背景色 */
+            background-color: #f9f9f9;
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
@@ -42,14 +41,23 @@
         .chat-log {
             border: 1px solid #ccc;
             padding: 15px;
-            max-height: 400px; /* 固定の高さ */
-            overflow-y: auto; /* スクロール可能 */
+            max-height: 400px;
+            overflow-y: auto;
             margin-bottom: 20px;
-            background-color: #fff; /* 白背景 */
+            background-color: #fff;
             border-radius: 10px;
+            position: relative;
+        }
+        .chat-log::before {
+            content: "お手伝いできることはありますか？";
+            display: block;
+            font-size: 18px;
+            font-weight: bold;
+            color: #666;
+            padding-bottom: 10px;
         }
         .user-message {
-            background-color: #fff9d6; /* 薄い黄色 */
+            background-color: #fff9d6;
             padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
@@ -60,21 +68,21 @@
             text-align: right;
         }
         .assistant-message {
-            background-color: #f2f2f2; /* 薄い灰色 */
+            background-color: #f2f2f2;
             padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
             white-space: pre-wrap;
             font-size: 14px;
             line-height: 1.6;
-            color: #000; /* フォント黒 */
+            color: #000;
         }
         form {
             margin-top: 20px;
         }
         textarea {
             width: 100%;
-            height: 100px;
+            height: 150px;
             padding: 15px;
             font-size: 16px;
             margin-bottom: 15px;
@@ -106,15 +114,15 @@
             padding: 12px 25px;
             font-size: 16px;
             font-weight: bold;
-            color: #000; /* フォント黒 */
-            background-color: #ffcc00; /* 黄色背景 */
+            color: #000;
+            background-color: #ffcc00;
             border: none;
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s ease-in-out;
         }
         input[type="submit"]:hover {
-            background-color: #e6b800; /* ホバー時の色 */
+            background-color: #e6b800;
         }
         .file-upload-info {
             margin-top: 10px;
@@ -131,37 +139,16 @@
         .chat-log::-webkit-scrollbar-track {
             background: #f1f1f1;
         }
-        .prompt-box {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            font-size: 18px;
-            margin-bottom: 20px;
-        }
-        .prompt-box h2 {
-            font-size: 28px;
-            color: #000;
-            margin-bottom: 10px;
-        }
     </style>
 </head>
 <body>
-    <!-- ヘッダーにロゴを追加 -->
     <div class="header">
         <img src="{{ url_for('static', filename='images/EYlogo.png') }}" alt="ロゴ">
         <h1>EY Chat</h1>
     </div>
 
     <div class="chat-container">
-        <!-- チャットの導入メッセージ -->
-        <div class="prompt-box">
-            <h2>お手伝いできることはありますか？</h2>
-            <p>EY Chatにメッセージを送信する</p>
-        </div>
-
-        <!-- チャット履歴を表示 -->
-        <div class="chat-log">
+        <div class="chat-log" id="chat-log">
             {% if chat_history %}
                 {% for entry in chat_history %}
                     <div class="user-message">ユーザー: {{ entry['user'] }}</div>
@@ -170,11 +157,10 @@
             {% endif %}
         </div>
 
-        <!-- 入力フォーム -->
         <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
             <input type="file" name="files" id="files" multiple>
             <div class="file-upload-info" id="file-upload-info"></div>
-            <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
+            <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください" oninput="clearDefaultMessage()"></textarea>
             <input type="submit" value="送信">
         </form>
     </div>
@@ -182,8 +168,10 @@
     <script>
         const fileInput = document.getElementById('files');
         const fileUploadInfo = document.getElementById('file-upload-info');
+        const chatLog = document.getElementById('chat-log');
+        const promptBox = document.getElementById('prompt');
 
-        fileInput.addEventListener('change', function() {
+        fileInput.addEventListener('change', function () {
             const files = fileInput.files;
             let fileInfo = '選択されたファイル: ';
             for (let i = 0; i < files.length; i++) {
@@ -191,6 +179,12 @@
             }
             fileUploadInfo.innerHTML = fileInfo ? fileInfo : '選択されたファイルがありません';
         });
+
+        function clearDefaultMessage() {
+            if (chatLog.firstChild && chatLog.firstChild.nodeType === Node.ELEMENT_NODE) {
+                chatLog.firstChild.remove();
+            }
+        }
     </script>
 </body>
 </html>
