@@ -9,16 +9,21 @@
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background: #ffffff; /* 背景を白に変更 */
+            background: #ffffff; /* 背景を白 */
             color: #333;
         }
         .header {
+            position: fixed; /* ヘッダーを固定 */
+            top: 0;
+            left: 0;
+            width: 100%;
             display: flex;
             align-items: center;
             justify-content: flex-start; /* 左揃え */
             padding: 20px 2%; /* 左右空白 */
             background: #ffffff;
             border-bottom: 1px solid #ddd;
+            z-index: 1000;
         }
         .header img {
             height: 70px; /* ロゴを大きく */
@@ -31,7 +36,7 @@
         }
         .container {
             max-width: calc(100% - 6cm); /* 左右の空白を3cmずつ設定 */
-            margin: 30px auto;
+            margin: 100px auto 30px; /* 上に固定ヘッダー分の余白を追加 */
             padding: 20px;
             background: #ffffff;
             border-radius: 10px;
@@ -58,6 +63,9 @@
             font-size: 18px; /* 大きめのテキスト */
             color: #333;
             text-align: right;
+            width: fit-content; /* 内容に合わせた幅 */
+            max-width: 70%; /* 最大幅 */
+            margin-left: auto; /* 右寄せ */
         }
         .assistant-message {
             background-color: #f2f2f2; /* 薄い灰色 */
@@ -66,6 +74,9 @@
             margin: 10px 0;
             font-size: 18px; /* 大きめのテキスト */
             color: #000;
+            text-align: left;
+            width: fit-content; /* 内容に合わせた幅 */
+            max-width: 70%; /* 最大幅 */
         }
         .form-container {
             background: #f0f0f0; /* 指示文・ファイル・送信ボタン枠の背景色 */
@@ -97,7 +108,7 @@
         }
         input[type="file"] {
             flex: 1; /* ファイル選択エリアを広げる */
-            max-width: 80%; /* 全体のバランス調整 */
+            max-width: 95%; /* 指示文エリアと左揃え */
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
