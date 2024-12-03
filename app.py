@@ -1,6 +1,6 @@
 import openai
 import os
-from flask import Flask, request, jsonify, render_template, session, send_file
+from flask import Flask, request, jsonify, render_template, session, send_file, url_for
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 import requests
@@ -8,6 +8,7 @@ import pandas as pd
 from docx import Document
 from pptx import Presentation
 import tempfile
+from io import BytesIO
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # セッションを管理するための秘密鍵
@@ -22,7 +23,7 @@ deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
 # Azure Cognitive Search の設定
 search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
 search_service_key = os.getenv("AZURE_SEARCH_KEY")
-index_name = "vector-1730110777868"  # 使用するインデックス名を指定
+index_name = "vector-1730110777868"
 
 # SearchClient の設定
 search_client = SearchClient(
@@ -123,36 +124,44 @@ def process_files_and_prompt():
             max_tokens=2000
         )
 
-        # 応答内容を取得し、履歴に追加
+        # 応答内容を取得し、ダウンロードリンクを追加
         response_content = response['choices'][0]['message']['content']
-        session['response_content'] = response_content  # ファイル出力用にセッションへ保存
+        download_link = f"<a href='{url_for('download_excel')}' target='_blank'>ファイルダウンロード</a>"
+        full_response = f"{response_content}<br>{download_link}"
+
+        # チャット履歴に追加
         session['chat_history'].append({
             'user': input_data_with_search,
-            'assistant': response_content
+            'assistant': full_response
         })
+        session['response_content'] = response_content  # ファイル出力用に保存
 
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
         return f"エラーが発生しました: {str(e)}"
 
-# ファイル出力用のルート
-@app.route('/download_output', methods=['POST'])
-def download_output():
+# Excel出力ルート
+@app.route('/download_excel', methods=['GET'])
+def download_excel():
     try:
         response_content = session.get('response_content', 'No response available')
-        prompt = request.form.get('prompt', '')
+        
+        # 応答をデータフレーム形式に変換
+        rows = [row.split(",") for row in response_content.split("\n") if row]
+        df = pd.DataFrame(rows[1:], columns=rows[0])  # 最初の行をカラム名にする
 
-        # 一時ファイルを生成して内容を保存
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as temp_file:
-            temp_file.write(f"プロンプト:\n{prompt}\n\n応答:\n{response_content}".encode('utf-8'))
-            temp_file_path = temp_file.name
+        # Excelファイルを生成
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Sheet1')
+        output.seek(0)
 
-        # クライアントにファイルを送信
-        return send_file(temp_file_path, as_attachment=True, download_name="output.txt")
+        # クライアントに送信
+        return send_file(output, as_attachment=True, download_name="output.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
-        return f"ファイル出力中にエラーが発生しました: {str(e)}"
+        return f"Excelファイルの出力中にエラーが発生しました: {str(e)}"
 
 if __name__ == '__main__':
     app.run(debug=True)
