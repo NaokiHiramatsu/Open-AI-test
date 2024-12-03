@@ -9,34 +9,34 @@
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background: #ffffff; /* 背景を白 */
+            background: #ffffff;
             color: #333;
         }
         .header {
-            position: fixed; /* ヘッダーを固定 */
+            position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             display: flex;
             align-items: center;
-            justify-content: flex-start; /* 左揃え */
-            padding: 20px 2%; /* 左右空白 */
+            justify-content: flex-start;
+            padding: 20px 2%;
             background: #ffffff;
             border-bottom: 1px solid #ddd;
             z-index: 1000;
         }
         .header img {
-            height: 70px; /* ロゴを大きく */
+            height: 70px;
             margin-right: 20px;
         }
         .header h1 {
-            font-size: 32px; /* タイトルを大きく */
+            font-size: 32px;
             margin: 0;
             color: #000;
         }
         .container {
-            max-width: calc(100% - 6cm); /* 左右の空白を3cmずつ設定 */
-            margin: 100px auto 30px; /* 上に固定ヘッダー分の余白を追加 */
+            max-width: calc(100% - 6cm);
+            margin: 100px auto 30px;
             padding: 20px;
             background: #ffffff;
             border-radius: 10px;
@@ -48,84 +48,58 @@
         .chat-log {
             border: 1px solid #ddd;
             padding: 20px;
-            min-height: 500px; /* チャットエリアを大きく */
+            min-height: 500px;
             max-height: 600px;
-            overflow-y: auto; /* スクロール可能 */
+            overflow-y: auto;
             background: #fff;
             border-radius: 10px;
-            font-size: 18px; /* テキストサイズを大きく */
-        }
-        .user-message {
-            background-color: #fff9d6; /* 薄い黄色 */
-            padding: 15px;
-            border-radius: 10px;
-            margin: 10px 0;
-            font-size: 18px; /* 大きめのテキスト */
-            color: #333;
-            text-align: right;
-            width: fit-content; /* 内容に合わせた幅 */
-            max-width: 70%; /* 最大幅 */
-            margin-left: auto; /* 右寄せ */
-        }
-        .assistant-message {
-            background-color: #f2f2f2; /* 薄い灰色 */
-            padding: 15px;
-            border-radius: 10px;
-            margin: 10px 0;
-            font-size: 18px; /* 大きめのテキスト */
-            color: #000;
-            text-align: left;
-            width: fit-content; /* 内容に合わせた幅 */
-            max-width: 70%; /* 最大幅 */
+            font-size: 18px;
         }
         .form-container {
-            background: #f0f0f0; /* 指示文・ファイル・送信ボタン枠の背景色 */
+            background: #f0f0f0;
             border-radius: 10px;
-            padding: 20px; /* 縦の長さを縮小 */
+            padding: 20px;
             border: 1px solid #ddd;
             display: flex;
             flex-direction: column;
             gap: 15px;
-            width: 80%; /* 背景枠の幅 */
-            margin: 0 auto; /* 中央揃え */
+            width: 80%;
+            margin: 0 auto;
         }
         textarea {
-            width: 90%; /* 背景枠内で中央に配置 */
-            height: 120px; /* 縦の長さを少し拡大 */
-            padding: 10px;
+            width: 100%;
+            height: 150px;
+            padding: 15px;
             font-size: 18px;
             border: 1px solid #ccc;
             border-radius: 10px;
             background: #fff;
-            margin: 0 auto; /* 中央揃え */
         }
         .form-footer {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            width: 90%; /* 背景枠の幅に合わせる */
-            margin: 0 auto;
+            margin-top: 10px;
         }
         input[type="file"] {
             flex: 1;
-            max-width: 45%; /* 指示入力エリアと左揃え */
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
             background: #fff;
             font-size: 16px;
+            max-width: 60%; /* ファイル選択エリアの幅を調整 */
         }
         input[type="submit"] {
             padding: 10px 20px;
             font-size: 16px;
             font-weight: bold;
-            color: #000; /* 黒文字 */
-            background: #ffcc00; /* 黄色背景 */
+            color: #000;
+            background: #ffcc00;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            max-width: 100px;
-            align-self: flex-end; /* 指示入力エリアの右に揃える */
+            max-width: 20%; /* 送信ボタンの幅を統一 */
         }
         input[type="submit"]:hover {
             background: #e6b800;
@@ -151,7 +125,7 @@
             {% endif %}
         </div>
 
-        <!-- 入力フォーム（枠で囲む） -->
+        <!-- 入力フォーム -->
         <div class="form-container">
             <form action="/process_files_and_prompt" method="post" enctype="multipart/form-data">
                 <textarea id="prompt" name="prompt" placeholder="ここに指示を入力してください"></textarea>
