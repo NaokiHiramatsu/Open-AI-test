@@ -111,6 +111,9 @@ def process_files_and_prompt():
             max_tokens=2000
         )
 
+        if not response or 'choices' not in response or not response['choices']:
+            raise ValueError("OpenAI APIから有効な応答がありません。")
+
         response_content = response['choices'][0]['message']['content']
         download_link = f"<a href='{url_for('download_excel')}' target='_blank'>ファイルダウンロード</a>"
         full_response = f"{response_content}<br>{download_link}"
@@ -124,17 +127,18 @@ def process_files_and_prompt():
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
+        app.logger.error(f"エラー: {str(e)}")
         return f"エラーが発生しました: {str(e)}"
 
 @app.route('/download_excel', methods=['GET'])
 def download_excel():
     try:
-        response_content = session.get('response_content', 'No response available')
-        if not response_content or response_content == "No response available":
-            raise ValueError("有効な応答がありません。")
+        response_content = session.get('response_content', None)
+        if not response_content:
+            raise ValueError("セッションに応答データがありません。")
 
         rows = [row.split(",") for row in response_content.split("\n") if row]
-        if len(rows) < 2:
+        if len(rows) < 2 or not all(len(row) == len(rows[0]) for row in rows):
             raise ValueError("応答のフォーマットが正しくありません。")
 
         df = pd.DataFrame(rows[1:], columns=rows[0])
@@ -147,6 +151,7 @@ def download_excel():
         return send_file(output, as_attachment=True, download_name="output.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
+        app.logger.error(f"Excel出力エラー: {str(e)}")
         return f"Excelファイルの出力中にエラーが発生しました: {str(e)}"
 
 if __name__ == '__main__':
