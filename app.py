@@ -5,8 +5,6 @@ from azure.core.credentials import AzureKeyCredential
 import openai
 import requests
 import pandas as pd
-from docx import Document
-from pptx import Presentation
 from io import BytesIO
 from flask_session import Session
 
@@ -26,17 +24,20 @@ deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME", "default-deployment")
 
 search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "https://search-service.azure.com")
 search_service_key = os.getenv("AZURE_SEARCH_KEY", "your-search-key")
-index_name = "vector-1730110777868"
+index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "default-index")
 
 vision_subscription_key = os.getenv("VISION_API_KEY", "your-vision-key")
 vision_endpoint = os.getenv("VISION_ENDPOINT", "https://vision.azure.com")
 
 # Azure Search クライアントの設定
-search_client = SearchClient(
-    endpoint=search_service_endpoint,
-    index_name=index_name,
-    credential=AzureKeyCredential(search_service_key)
-)
+try:
+    search_client = SearchClient(
+        endpoint=search_service_endpoint,
+        index_name=index_name,
+        credential=AzureKeyCredential(search_service_key)
+    )
+except Exception as e:
+    print(f"Azure Search Client初期化エラー: {str(e)}")
 
 @app.route('/')
 def index():
@@ -102,7 +103,7 @@ def process_files_and_prompt():
         input_data = f"アップロードされたファイル内容:\n{file_contents}\nプロンプト:\n{prompt}"
 
         search_results = search_client.search(search_text=prompt, top=3)
-        relevant_docs = "\n".join([doc['chunk'] for doc in search_results])
+        relevant_docs = "\n".join([doc['content'] for doc in search_results])
 
         input_data_with_search = f"{input_data}\n\n関連ドキュメント:\n{relevant_docs}"
         messages.append({"role": "user", "content": input_data_with_search})
@@ -157,4 +158,4 @@ def download_excel():
         return jsonify({"error": f"Excelファイルの出力中にエラーが発生しました: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
