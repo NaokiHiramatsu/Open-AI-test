@@ -1,49 +1,46 @@
-import openai
 import os
 from flask import Flask, request, jsonify, render_template, session, send_file, url_for
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
+import openai
 import requests
 import pandas as pd
 from docx import Document
 from pptx import Presentation
-import tempfile
 from io import BytesIO
 from flask_session import Session
 
+# Flaskアプリの設定
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # セッションを管理するための秘密鍵
+app.secret_key = os.urandom(24)
 
-# セッション設定をサーバー側ストレージに変更
-app.config['SESSION_TYPE'] = 'filesystem'  # ローカルファイルシステムにセッションを保存
+# セッション設定
+app.config['SESSION_TYPE'] = 'filesystem'
 Session(app)
 
-# 環境変数からAPIキーやエンドポイントを取得
-openai.api_type = "azure"
-openai.api_base = os.getenv("OPENAI_API_BASE")
+# 環境変数の取得とデフォルト値の設定
+openai.api_base = os.getenv("OPENAI_API_BASE", "https://example.openai.azure.com")
+openai.api_key = os.getenv("OPENAI_API_KEY", "your-api-key")
 openai.api_version = "2024-08-01-preview"
-openai.api_key = os.getenv("OPENAI_API_KEY")
-deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
+deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME", "default-deployment")
 
-# Azure Cognitive Search の設定
-search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
-search_service_key = os.getenv("AZURE_SEARCH_KEY")
+search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "https://search-service.azure.com")
+search_service_key = os.getenv("AZURE_SEARCH_KEY", "your-search-key")
 index_name = "vector-1730110777868"
 
-# SearchClient の設定
+vision_subscription_key = os.getenv("VISION_API_KEY", "your-vision-key")
+vision_endpoint = os.getenv("VISION_ENDPOINT", "https://vision.azure.com")
+
+# Azure Search クライアントの設定
 search_client = SearchClient(
     endpoint=search_service_endpoint,
     index_name=index_name,
     credential=AzureKeyCredential(search_service_key)
 )
 
-# Computer Vision API の設定
-vision_subscription_key = os.getenv("VISION_API_KEY")
-vision_endpoint = os.getenv("VISION_ENDPOINT")
-
 @app.route('/')
 def index():
-    session.clear()  # ブラウザを閉じたらセッションをリセット
+    session.clear()  # セッションの初期化
     return render_template('index.html', chat_history=[])
 
 @app.route('/ocr', methods=['POST'])
@@ -121,12 +118,7 @@ def process_files_and_prompt():
 
         response_content = response['choices'][0]['message']['content']
 
-        # セッションにデータを保存
-        app.logger.debug(f"セッションに保存する応答データ: {response_content}")
         session['response_content'] = response_content
-        app.logger.debug(f"セッション状態: {session.get('response_content')}")
-
-        # レスポンス処理
         download_link = f"<a href='{url_for('download_excel')}' target='_blank'>ファイルダウンロード</a>"
         full_response = f"{response_content}<br>{download_link}"
         session['chat_history'].append({
@@ -137,16 +129,13 @@ def process_files_and_prompt():
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
-        app.logger.error(f"エラー: {str(e)}")
-        return f"エラーが発生しました: {str(e)}"
+        app.logger.error(f"エラー: {str(e)}", exc_info=True)
+        return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
 
 @app.route('/download_excel', methods=['GET'])
 def download_excel():
     try:
-        # セッションから応答データを取得
         response_content = session.get('response_content', None)
-        app.logger.debug(f"取得したセッションデータ: {response_content}")
-
         if not response_content:
             raise ValueError("セッションに応答データがありません。")
 
@@ -164,8 +153,8 @@ def download_excel():
         return send_file(output, as_attachment=True, download_name="output.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
-        app.logger.error(f"Excel出力エラー: {str(e)}")
-        return f"Excelファイルの出力中にエラーが発生しました: {str(e)}"
+        app.logger.error(f"Excel出力エラー: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Excelファイルの出力中にエラーが発生しました: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
