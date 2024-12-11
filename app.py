@@ -8,7 +8,6 @@ import pandas as pd
 from io import BytesIO
 from flask_session import Session
 
-# Flaskアプリケーションの設定
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
@@ -16,18 +15,21 @@ app.secret_key = os.urandom(24)
 app.config['SESSION_TYPE'] = 'filesystem'
 Session(app)
 
-# 環境変数の取得
+# 環境変数の設定
 openai.api_type = "azure"
-openai.api_base = os.getenv("OPENAI_API_BASE")
+openai.api_base = os.getenv("OPENAI_API_BASE", "https://example.openai.azure.com")
 openai.api_version = "2024-08-01-preview"
-openai.api_key = os.getenv("OPENAI_API_KEY")
-deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
+openai.api_key = os.getenv("OPENAI_API_KEY", "your-api-key")
+deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME", "default-deployment")
 
-search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
-search_service_key = os.getenv("AZURE_SEARCH_KEY")
+search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "https://search-service.azure.com")
+search_service_key = os.getenv("AZURE_SEARCH_KEY", "your-search-key")
 index_name = "vector-1730110777868"
 
-# Azure Searchクライアント設定
+vision_subscription_key = os.getenv("VISION_API_KEY", "your-vision-key")
+vision_endpoint = os.getenv("VISION_ENDPOINT", "https://vision.azure.com")
+
+# Azure Search クライアントの設定
 search_client = SearchClient(
     endpoint=search_service_endpoint,
     index_name=index_name,
@@ -52,13 +54,7 @@ def ocr_endpoint():
         return jsonify({"error": str(e)}), 500
 
 def ocr_image(image_url):
-    """
-    Azure Computer Vision APIを使ったOCR処理
-    """
-    vision_endpoint = os.getenv("VISION_ENDPOINT")
-    vision_subscription_key = os.getenv("VISION_API_KEY")
-
-    ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
+    ocr_url = vision_endpoint + "/vision/v3.2/ocr"
     headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
     params = {"language": "ja", "detectOrientation": "true"}
     data = {"url": image_url}
@@ -112,24 +108,31 @@ def process_files_and_prompt():
             max_tokens=2000
         )
 
-        if not response or 'choices' not in response or not response['choices']:
-            raise ValueError("OpenAI APIから有効な応答がありません。")
-
         response_content = response['choices'][0].get('message', {}).get('content', '応答が空です')
+        formatted_content = format_response(response_content)
+        
         download_link = f"<a href='{url_for('download_excel')}' target='_blank'>ファイルダウンロード</a>"
-        full_response = f"{response_content}<br>{download_link}"
+        full_response = f"{formatted_content}<br>{download_link}"
 
         session['chat_history'].append({
             'user': input_data_with_search,
             'assistant': full_response
         })
-        session['response_content'] = response_content
+        session['response_content'] = formatted_content
 
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
         app.logger.error(f"エラー: {str(e)}", exc_info=True)
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
+
+def format_response(response_content):
+    lines = response_content.split("\n")
+    data = []
+    for line in lines:
+        if line.strip():
+            data.append(line.strip())
+    return "\n".join(data)
 
 @app.route('/download_excel', methods=['GET'])
 def download_excel():
@@ -139,9 +142,6 @@ def download_excel():
             raise ValueError("セッションに応答データがありません。")
 
         rows = [row.split(",") for row in response_content.split("\n") if row]
-        if len(rows) < 2 or not all(len(row) == len(rows[0]) for row in rows):
-            raise ValueError("応答のフォーマットが正しくありません。")
-
         df = pd.DataFrame(rows[1:], columns=rows[0])
 
         output = BytesIO()
