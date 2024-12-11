@@ -108,14 +108,19 @@ def process_files_and_prompt():
         )
 
         response_content = response['choices'][0]['message']['content']
-        download_link = f"<a href='{url_for('download_excel')}' target='_blank'>ファイルダウンロード</a>"
-        full_response = f"{response_content}<br>{download_link}"
+
+        rows = [row.split(",") for row in response_content.split("\n") if row]
+        if len(rows) < 2 or not all(len(row) == len(rows[0]) for row in rows):
+            raise ValueError("AI応答のフォーマットが正しくありません。")
 
         session['chat_history'].append({
             'user': input_data_with_search,
-            'assistant': full_response
+            'assistant': response_content
         })
         session['response_content'] = response_content
+
+        download_link = f"<a href='{url_for('download_excel')}' target='_blank'>Excelファイルをダウンロード</a>"
+        full_response = f"{response_content}<br>{download_link}"
 
         return render_template('index.html', chat_history=session['chat_history'])
 
