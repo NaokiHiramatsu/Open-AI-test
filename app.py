@@ -7,6 +7,7 @@ import pandas as pd
 from io import BytesIO
 from flask_session import Session
 import requests
+from fpdf import FPDF
 
 # Flaskアプリの設定
 app = Flask(__name__)
@@ -108,29 +109,28 @@ def process_files_and_prompt():
         )
 
         response_content = response['choices'][0]['message']['content']
-
-        # AI応答を解析して適切な形式でファイルを出力
         session['response_content'] = response_content
-        output_path = create_file_from_response(response_content)
 
-        download_link = f"<a href='{url_for('download_file', filename=output_path)}' target='_blank'>ファイルダウンロード</a>"
-        full_response = f"{response_content}<br>{download_link}"
+        format_decision = determine_output_format(response_content)
+        file_data, mimetype, filename = generate_file(response_content, format_decision)
 
         session['chat_history'].append({
             'user': input_data_with_search,
-            'assistant': full_response
+            'assistant': response_content
         })
 
-        return render_template('index.html', chat_history=session['chat_history'])
+        return send_file(file_data, mimetype=mimetype, as_attachment=True, download_name=filename)
 
     except Exception as e:
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
 
-def create_file_from_response(response_content):
-    """
-    AIの応答からデータを解析し、適切な形式でファイルを生成します。
-    """
+@app.route('/download_excel', methods=['GET'])
+def download_excel():
     try:
+        response_content = session.get('response_content', None)
+        if not response_content:
+            raise ValueError("セッションに応答データがありません。")
+
         rows = [row.split(",") for row in response_content.split("\n") if row]
         if len(rows) < 2 or not all(len(row) == len(rows[0]) for row in rows):
             raise ValueError("応答のフォーマットが正しくありません。")
@@ -142,21 +142,69 @@ def create_file_from_response(response_content):
             df.to_excel(writer, index=False, sheet_name='Sheet1')
         output.seek(0)
 
-        filename = "output.xlsx"
-        with open(filename, "wb") as f:
-            f.write(output.read())
-
-        return filename
+        return send_file(output, as_attachment=True, download_name="output.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
-        raise ValueError(f"ファイル生成中にエラーが発生しました: {str(e)}")
+        return jsonify({"error": f"Excelファイルの出力中にエラーが発生しました: {str(e)}"}), 500
 
-@app.route('/download_file/<filename>', methods=['GET'])
-def download_file(filename):
-    try:
-        return send_file(filename, as_attachment=True)
-    except Exception as e:
-        return jsonify({"error": f"ファイルのダウンロード中にエラーが発生しました: {str(e)}"}), 500
+def determine_output_format(response_content):
+    """
+    AIを用いて出力形式を判断する関数
+    """
+    prompt = f"""
+    以下のテキストがどの形式に適しているかを判断してください。可能な形式としては次のものがあります:
+    1. 表形式（ExcelまたはCSV）
+    2. 自然言語（PDFまたはテキスト）
+    3. コードスニペット（Python, JSONなど）
+
+    応答の内容:
+    「{response_content}」
+
+    適した形式と理由を教えてください。
+    """
+    response = openai.Completion.create(
+        engine=deployment_name,
+        prompt=prompt,
+        max_tokens=150,
+        temperature=0.7
+    )
+    return response['choices'][0]['text'].strip()
+
+def generate_file(response_content, format_decision):
+    """
+    フォーマット判断に基づき適切なファイルを生成する関数
+    """
+    if "表形式" in format_decision:
+        rows = [row.split(",") for row in response_content.split("\n") if row]
+        df = pd.DataFrame(rows[1:], columns=rows[0])
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Sheet1')
+        output.seek(0)
+        return output, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "output.xlsx"
+
+    elif "自然言語" in format_decision:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        for line in response_content.split("\n"):
+            pdf.cell(200, 10, txt=line, ln=True, align='L')
+        output = BytesIO()
+        pdf.output(output)
+        output.seek(0)
+        return output, "application/pdf", "output.pdf"
+
+    elif "コードスニペット" in format_decision:
+        output = BytesIO()
+        output.write(response_content.encode('utf-8'))
+        output.seek(0)
+        return output, "text/plain", "output.txt"
+
+    else:
+        output = BytesIO()
+        output.write(response_content.encode('utf-8'))
+        output.seek(0)
+        return output, "text/plain", "output.txt"
 
 if __name__ == '__main__':
     app.run(debug=True)
