@@ -3,15 +3,14 @@ from flask import Flask, request, jsonify, render_template, session, send_file, 
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 import openai
-import requests
 import pandas as pd
 from io import BytesIO
 from flask_session import Session
+import requests
 
+# Flaskアプリの設定
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
-
-# セッション設定
 app.config['SESSION_TYPE'] = 'filesystem'
 Session(app)
 
@@ -97,7 +96,7 @@ def process_files_and_prompt():
         input_data = f"アップロードされたファイル内容:\n{file_contents}\nプロンプト:\n{prompt}"
 
         search_results = search_client.search(search_text=prompt, top=3)
-        relevant_docs = "\n".join([doc.get('chunk', '該当なし') for doc in search_results])
+        relevant_docs = "\n".join([doc['chunk'] for doc in search_results])
 
         input_data_with_search = f"{input_data}\n\n関連ドキュメント:\n{relevant_docs}"
         messages.append({"role": "user", "content": input_data_with_search})
@@ -108,31 +107,20 @@ def process_files_and_prompt():
             max_tokens=2000
         )
 
-        response_content = response['choices'][0].get('message', {}).get('content', '応答が空です')
-        formatted_content = format_response(response_content)
-        
+        response_content = response['choices'][0]['message']['content']
         download_link = f"<a href='{url_for('download_excel')}' target='_blank'>ファイルダウンロード</a>"
-        full_response = f"{formatted_content}<br>{download_link}"
+        full_response = f"{response_content}<br>{download_link}"
 
         session['chat_history'].append({
             'user': input_data_with_search,
             'assistant': full_response
         })
-        session['response_content'] = formatted_content
+        session['response_content'] = response_content
 
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
-        app.logger.error(f"エラー: {str(e)}", exc_info=True)
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
-
-def format_response(response_content):
-    lines = response_content.split("\n")
-    data = []
-    for line in lines:
-        if line.strip():
-            data.append(line.strip())
-    return "\n".join(data)
 
 @app.route('/download_excel', methods=['GET'])
 def download_excel():
@@ -142,6 +130,9 @@ def download_excel():
             raise ValueError("セッションに応答データがありません。")
 
         rows = [row.split(",") for row in response_content.split("\n") if row]
+        if len(rows) < 2 or not all(len(row) == len(rows[0]) for row in rows):
+            raise ValueError("応答のフォーマットが正しくありません。")
+
         df = pd.DataFrame(rows[1:], columns=rows[0])
 
         output = BytesIO()
@@ -152,7 +143,6 @@ def download_excel():
         return send_file(output, as_attachment=True, download_name="output.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
-        app.logger.error(f"Excel出力エラー: {str(e)}", exc_info=True)
         return jsonify({"error": f"Excelファイルの出力中にエラーが発生しました: {str(e)}"}), 500
 
 if __name__ == '__main__':
