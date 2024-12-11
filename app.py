@@ -8,7 +8,7 @@ import pandas as pd
 from io import BytesIO
 from flask_session import Session
 
-# Flaskアプリの設定
+# Flaskアプリケーションの設定
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
@@ -16,32 +16,27 @@ app.secret_key = os.urandom(24)
 app.config['SESSION_TYPE'] = 'filesystem'
 Session(app)
 
-# 環境変数の取得とデフォルト値の設定
-openai.api_base = os.getenv("OPENAI_API_BASE", "https://example.openai.azure.com")
-openai.api_key = os.getenv("OPENAI_API_KEY", "your-api-key")
+# 環境変数の取得
+openai.api_type = "azure"
+openai.api_base = os.getenv("OPENAI_API_BASE")
 openai.api_version = "2024-08-01-preview"
-deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME", "default-deployment")
+openai.api_key = os.getenv("OPENAI_API_KEY")
+deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME")
 
-search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "https://search-service.azure.com")
-search_service_key = os.getenv("AZURE_SEARCH_KEY", "your-search-key")
-index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "default-index")
+search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
+search_service_key = os.getenv("AZURE_SEARCH_KEY")
+index_name = "vector-1730110777868"
 
-vision_subscription_key = os.getenv("VISION_API_KEY", "your-vision-key")
-vision_endpoint = os.getenv("VISION_ENDPOINT", "https://vision.azure.com")
-
-# Azure Search クライアントの設定
-try:
-    search_client = SearchClient(
-        endpoint=search_service_endpoint,
-        index_name=index_name,
-        credential=AzureKeyCredential(search_service_key)
-    )
-except Exception as e:
-    print(f"Azure Search Client初期化エラー: {str(e)}")
+# Azure Searchクライアント設定
+search_client = SearchClient(
+    endpoint=search_service_endpoint,
+    index_name=index_name,
+    credential=AzureKeyCredential(search_service_key)
+)
 
 @app.route('/')
 def index():
-    session.clear()  # セッションの初期化
+    session.clear()
     return render_template('index.html', chat_history=[])
 
 @app.route('/ocr', methods=['POST'])
@@ -58,9 +53,12 @@ def ocr_endpoint():
 
 def ocr_image(image_url):
     """
-    Azure Computer Vision APIを使って画像のOCRを実行する関数
+    Azure Computer Vision APIを使ったOCR処理
     """
-    ocr_url = vision_endpoint + "/vision/v3.2/ocr"
+    vision_endpoint = os.getenv("VISION_ENDPOINT")
+    vision_subscription_key = os.getenv("VISION_API_KEY")
+
+    ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
     headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
     params = {"language": "ja", "detectOrientation": "true"}
     data = {"url": image_url}
@@ -103,7 +101,7 @@ def process_files_and_prompt():
         input_data = f"アップロードされたファイル内容:\n{file_contents}\nプロンプト:\n{prompt}"
 
         search_results = search_client.search(search_text=prompt, top=3)
-        relevant_docs = "\n".join([doc['content'] for doc in search_results])
+        relevant_docs = "\n".join([doc.get('chunk', '該当なし') for doc in search_results])
 
         input_data_with_search = f"{input_data}\n\n関連ドキュメント:\n{relevant_docs}"
         messages.append({"role": "user", "content": input_data_with_search})
@@ -117,15 +115,15 @@ def process_files_and_prompt():
         if not response or 'choices' not in response or not response['choices']:
             raise ValueError("OpenAI APIから有効な応答がありません。")
 
-        response_content = response['choices'][0]['message']['content']
-
-        session['response_content'] = response_content
+        response_content = response['choices'][0].get('message', {}).get('content', '応答が空です')
         download_link = f"<a href='{url_for('download_excel')}' target='_blank'>ファイルダウンロード</a>"
         full_response = f"{response_content}<br>{download_link}"
+
         session['chat_history'].append({
             'user': input_data_with_search,
             'assistant': full_response
         })
+        session['response_content'] = response_content
 
         return render_template('index.html', chat_history=session['chat_history'])
 
@@ -158,4 +156,4 @@ def download_excel():
         return jsonify({"error": f"Excelファイルの出力中にエラーが発生しました: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(debug=True)
