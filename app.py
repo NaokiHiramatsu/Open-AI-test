@@ -9,9 +9,14 @@ from docx import Document
 from pptx import Presentation
 import tempfile
 from io import BytesIO
+from flask_session import Session
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # セッションを管理するための秘密鍵
+
+# セッション設定をサーバー側ストレージに変更
+app.config['SESSION_TYPE'] = 'filesystem'  # ローカルファイルシステムにセッションを保存
+Session(app)
 
 # 環境変数からAPIキーやエンドポイントを取得
 openai.api_type = "azure"
@@ -115,14 +120,19 @@ def process_files_and_prompt():
             raise ValueError("OpenAI APIから有効な応答がありません。")
 
         response_content = response['choices'][0]['message']['content']
+
+        # セッションにデータを保存
+        app.logger.debug(f"セッションに保存する応答データ: {response_content}")
+        session['response_content'] = response_content
+        app.logger.debug(f"セッション状態: {session.get('response_content')}")
+
+        # レスポンス処理
         download_link = f"<a href='{url_for('download_excel')}' target='_blank'>ファイルダウンロード</a>"
         full_response = f"{response_content}<br>{download_link}"
-
         session['chat_history'].append({
             'user': input_data_with_search,
             'assistant': full_response
         })
-        session['response_content'] = response_content
 
         return render_template('index.html', chat_history=session['chat_history'])
 
@@ -133,7 +143,10 @@ def process_files_and_prompt():
 @app.route('/download_excel', methods=['GET'])
 def download_excel():
     try:
+        # セッションから応答データを取得
         response_content = session.get('response_content', None)
+        app.logger.debug(f"取得したセッションデータ: {response_content}")
+
         if not response_content:
             raise ValueError("セッションに応答データがありません。")
 
