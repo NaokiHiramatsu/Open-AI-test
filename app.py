@@ -108,64 +108,55 @@ def process_files_and_prompt():
         )
 
         response_content = response['choices'][0]['message']['content']
+
+        # AI応答を解析して適切な形式でファイルを出力
+        session['response_content'] = response_content
+        output_path = create_file_from_response(response_content)
+
+        download_link = f"<a href='{url_for('download_file', filename=output_path)}' target='_blank'>ファイルダウンロード</a>"
+        full_response = f"{response_content}<br>{download_link}"
+
         session['chat_history'].append({
             'user': input_data_with_search,
-            'assistant': response_content
+            'assistant': full_response
         })
-        session['response_content'] = response_content
 
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
 
-@app.route('/download_file', methods=['GET'])
-def download_file():
-    try:
-        response_content = session.get('response_content', None)
-        if not response_content:
-            raise ValueError("セッションに応答データがありません。")
-
-        parsed_data = parse_ai_response(response_content)
-        file_format = request.args.get("format", "excel")
-        file_data = generate_file(parsed_data, format=file_format)
-        filename = f"output.{file_format}"
-
-        mime_types = {
-            "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "csv": "text/csv",
-            "json": "application/json",
-            "txt": "text/plain"
-        }
-        return send_file(file_data, as_attachment=True, download_name=filename, mimetype=mime_types.get(file_format, "application/octet-stream"))
-
-    except Exception as e:
-        return jsonify({"error": f"ファイル生成中にエラーが発生しました: {str(e)}"}), 500
-
-def parse_ai_response(response_content):
+def create_file_from_response(response_content):
+    """
+    AIの応答からデータを解析し、適切な形式でファイルを生成します。
+    """
     try:
         rows = [row.split(",") for row in response_content.split("\n") if row]
         if len(rows) < 2 or not all(len(row) == len(rows[0]) for row in rows):
-            raise ValueError("AI応答は表形式ではありません。")
-        return pd.DataFrame(rows[1:], columns=rows[0])
-    except Exception:
-        return response_content
+            raise ValueError("応答のフォーマットが正しくありません。")
 
-def generate_file(data, format="excel"):
-    output = BytesIO()
-    if isinstance(data, pd.DataFrame):
-        if format == "excel":
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                data.to_excel(writer, index=False, sheet_name='Sheet1')
-        elif format == "csv":
-            data.to_csv(output, index=False)
-        elif format == "json":
-            output.write(data.to_json(orient="records").encode("utf-8"))
-    else:
-        output.write(data.encode("utf-8"))
+        df = pd.DataFrame(rows[1:], columns=rows[0])
 
-    output.seek(0)
-    return output
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Sheet1')
+        output.seek(0)
+
+        filename = "output.xlsx"
+        with open(filename, "wb") as f:
+            f.write(output.read())
+
+        return filename
+
+    except Exception as e:
+        raise ValueError(f"ファイル生成中にエラーが発生しました: {str(e)}")
+
+@app.route('/download_file/<filename>', methods=['GET'])
+def download_file(filename):
+    try:
+        return send_file(filename, as_attachment=True)
+    except Exception as e:
+        return jsonify({"error": f"ファイルのダウンロード中にエラーが発生しました: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
