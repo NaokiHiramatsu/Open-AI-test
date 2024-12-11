@@ -108,47 +108,64 @@ def process_files_and_prompt():
         )
 
         response_content = response['choices'][0]['message']['content']
-
-        rows = [row.split(",") for row in response_content.split("\n") if row]
-        if len(rows) < 2 or not all(len(row) == len(rows[0]) for row in rows):
-            raise ValueError("AI応答のフォーマットが正しくありません。")
-
         session['chat_history'].append({
             'user': input_data_with_search,
             'assistant': response_content
         })
         session['response_content'] = response_content
 
-        download_link = f"<a href='{url_for('download_excel')}' target='_blank'>Excelファイルをダウンロード</a>"
-        full_response = f"{response_content}<br>{download_link}"
-
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
 
-@app.route('/download_excel', methods=['GET'])
-def download_excel():
+@app.route('/download_file', methods=['GET'])
+def download_file():
     try:
         response_content = session.get('response_content', None)
         if not response_content:
             raise ValueError("セッションに応答データがありません。")
 
-        rows = [row.split(",") for row in response_content.split("\n") if row]
-        if len(rows) < 2 or not all(len(row) == len(rows[0]) for row in rows):
-            raise ValueError("応答のフォーマットが正しくありません。")
+        parsed_data = parse_ai_response(response_content)
+        file_format = request.args.get("format", "excel")
+        file_data = generate_file(parsed_data, format=file_format)
+        filename = f"output.{file_format}"
 
-        df = pd.DataFrame(rows[1:], columns=rows[0])
-
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='Sheet1')
-        output.seek(0)
-
-        return send_file(output, as_attachment=True, download_name="output.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        mime_types = {
+            "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "csv": "text/csv",
+            "json": "application/json",
+            "txt": "text/plain"
+        }
+        return send_file(file_data, as_attachment=True, download_name=filename, mimetype=mime_types.get(file_format, "application/octet-stream"))
 
     except Exception as e:
-        return jsonify({"error": f"Excelファイルの出力中にエラーが発生しました: {str(e)}"}), 500
+        return jsonify({"error": f"ファイル生成中にエラーが発生しました: {str(e)}"}), 500
+
+def parse_ai_response(response_content):
+    try:
+        rows = [row.split(",") for row in response_content.split("\n") if row]
+        if len(rows) < 2 or not all(len(row) == len(rows[0]) for row in rows):
+            raise ValueError("AI応答は表形式ではありません。")
+        return pd.DataFrame(rows[1:], columns=rows[0])
+    except Exception:
+        return response_content
+
+def generate_file(data, format="excel"):
+    output = BytesIO()
+    if isinstance(data, pd.DataFrame):
+        if format == "excel":
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                data.to_excel(writer, index=False, sheet_name='Sheet1')
+        elif format == "csv":
+            data.to_csv(output, index=False)
+        elif format == "json":
+            output.write(data.to_json(orient="records").encode("utf-8"))
+    else:
+        output.write(data.encode("utf-8"))
+
+    output.seek(0)
+    return output
 
 if __name__ == '__main__':
     app.run(debug=True)
