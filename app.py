@@ -8,6 +8,7 @@ from io import BytesIO
 from flask_session import Session
 import requests
 from fpdf import FPDF
+from docx import Document
 
 # Flaskアプリの設定
 app = Flask(__name__)
@@ -109,75 +110,88 @@ def process_files_and_prompt():
         response_content = response['choices'][0]['message']['content']
         session['response_content'] = response_content
 
-        format_decision = determine_output_format(response_content)
-        file_data, mimetype, filename = generate_file(response_content, format_decision)
+        file_part, file_format, text_part = process_response_content(response_content)
 
         session['chat_history'].append({
             'user': input_data_with_search,
-            'assistant': response_content
+            'assistant': text_part
         })
 
-        return send_file(file_data, mimetype=mimetype, as_attachment=True, download_name=filename)
+        if file_part:
+            file_data = generate_file(file_part, file_format)
+            return send_file(file_data, mimetype=file_data[1], as_attachment=True, download_name=file_data[2])
+        else:
+            return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
 
-def determine_output_format(response_content):
+def process_response_content(response_content):
     try:
         prompt = f"""
-        次の応答データに最適な出力形式を判断してください。
-        フォーマット候補:
-        1. 表形式 (ExcelまたはCSV)
-        2. 自然言語 (PDFまたはTXT)
-        3. コード (JSONまたはPython)
-        内容: {response_content}
+        以下のテキストを解析して、ファイルで返す部分と文章で返す部分に分けてください。
+        ファイル形式も指示してください（Excel, PDF, Wordなど）。
+        - ファイル形式で返す部分:
+        - 使用するファイル形式:
+        - 文章形式で返す部分:
+
+        応答内容:
+        {response_content}
         """
         response = openai.Completion.create(
             engine=deployment_name,
             prompt=prompt,
-            max_tokens=100,
-            temperature=0.5
+            max_tokens=300,
+            temperature=0.3
         )
-        return response['choices'][0]['text'].strip()
-    except Exception:
-        return "表形式"
+        analysis = response['choices'][0]['text'].strip()
 
-def generate_file(response_content, format_decision):
-    try:
-        if "表形式" in format_decision:
-            rows = [row.split(",") for row in response_content.split("\n") if row]
-            df = pd.DataFrame(rows[1:], columns=rows[0])
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df.to_excel(writer, index=False, sheet_name='Sheet1')
-            output.seek(0)
-            return output, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "output.xlsx"
+        file_part, file_format, text_part = "", "", ""
+        for line in analysis.split("\n"):
+            if line.startswith("- ファイル形式で返す部分:"):
+                file_part = line.split(":")[1].strip()
+            elif line.startswith("- 使用するファイル形式:"):
+                file_format = line.split(":")[1].strip()
+            elif line.startswith("- 文章形式で返す部分:"):
+                text_part = line.split(":")[1].strip()
 
-        elif "自然言語" in format_decision:
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            for line in response_content.split("\n"):
-                pdf.cell(200, 10, txt=line, ln=True, align='L')
-            output = BytesIO()
-            pdf.output(output)
-            output.seek(0)
-            return output, "application/pdf", "output.pdf"
-
-        elif "コード" in format_decision:
-            output = BytesIO()
-            output.write(response_content.encode('utf-8'))
-            output.seek(0)
-            return output, "text/plain", "output.txt"
+        return file_part, file_format, text_part
 
     except Exception:
-        pass
+        return response_content, "text", ""
 
-    # デフォルト: テキスト形式で返す
+def generate_file(content, file_format):
     output = BytesIO()
-    output.write(response_content.encode('utf-8'))
+
+    if file_format == "Excel":
+        rows = [row.split(",") for row in content.split("\n") if row]
+        df = pd.DataFrame(rows[1:], columns=rows[0])
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Sheet1')
+    elif file_format == "PDF":
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        for line in content.split("\n"):
+            pdf.cell(200, 10, txt=line, ln=True, align='L')
+        pdf.output(output)
+    elif file_format == "Word":
+        doc = Document()
+        for line in content.split("\n"):
+            doc.add_paragraph(line)
+        doc.save(output)
+    else:
+        output.write(content.encode('utf-8'))
+
     output.seek(0)
-    return output, "text/plain", "output.txt"
+    if file_format == "Excel":
+        return output, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "output.xlsx"
+    elif file_format == "PDF":
+        return output, "application/pdf", "output.pdf"
+    elif file_format == "Word":
+        return output, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "output.docx"
+    else:
+        return output, "text/plain", "output.txt"
 
 if __name__ == '__main__':
     app.run(debug=True)
