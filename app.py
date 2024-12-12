@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify, render_template, session, send_file, url_for
+from flask import Flask, request, jsonify, render_template, session, send_file
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 import openai
@@ -54,7 +54,7 @@ def ocr_endpoint():
         return jsonify({"error": str(e)}), 500
 
 def ocr_image(image_url):
-    ocr_url = vision_endpoint + "/vision/v3.2/ocr"
+    ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
     headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
     params = {"language": "ja", "detectOrientation": "true"}
     data = {"url": image_url}
@@ -66,8 +66,7 @@ def ocr_image(image_url):
     text_results = []
     for region in ocr_results.get("regions", []):
         for line in region.get("lines", []):
-            line_text = " ".join([word["text"] for word in line["words"]])
-            text_results.append(line_text)
+            text_results.append(" ".join(word["text"] for word in line["words"]))
     return "\n".join(text_results)
 
 @app.route('/process_files_and_prompt', methods=['POST'])
@@ -90,14 +89,13 @@ def process_files_and_prompt():
                 df = pd.read_excel(file, engine='openpyxl')
                 columns = df.columns.tolist()
                 rows_text = df.to_string(index=False)
-                df_text = f"ファイル名: {file.filename}\n列: {columns}\n内容:\n{rows_text}"
-                file_data_text.append(df_text)
+                file_data_text.append(f"ファイル名: {file.filename}\n列: {columns}\n内容:\n{rows_text}")
 
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
         input_data = f"アップロードされたファイル内容:\n{file_contents}\nプロンプト:\n{prompt}"
 
         search_results = search_client.search(search_text=prompt, top=3)
-        relevant_docs = "\n".join([doc['chunk'] for doc in search_results])
+        relevant_docs = "\n".join(doc['chunk'] for doc in search_results)
 
         input_data_with_search = f"{input_data}\n\n関連ドキュメント:\n{relevant_docs}"
         messages.append({"role": "user", "content": input_data_with_search})
@@ -124,87 +122,62 @@ def process_files_and_prompt():
     except Exception as e:
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
 
-@app.route('/download_excel', methods=['GET'])
-def download_excel():
-    try:
-        response_content = session.get('response_content', None)
-        if not response_content:
-            raise ValueError("セッションに応答データがありません。")
-
-        rows = [row.split(",") for row in response_content.split("\n") if row]
-        if len(rows) < 2 or not all(len(row) == len(rows[0]) for row in rows):
-            raise ValueError("応答のフォーマットが正しくありません。")
-
-        df = pd.DataFrame(rows[1:], columns=rows[0])
-
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='Sheet1')
-        output.seek(0)
-
-        return send_file(output, as_attachment=True, download_name="output.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-    except Exception as e:
-        return jsonify({"error": f"Excelファイルの出力中にエラーが発生しました: {str(e)}"}), 500
-
 def determine_output_format(response_content):
-    """
-    AIを用いて出力形式を判断する関数
-    """
-    prompt = f"""
-    以下のテキストがどの形式に適しているかを判断してください。可能な形式としては次のものがあります:
-    1. 表形式（ExcelまたはCSV）
-    2. 自然言語（PDFまたはテキスト）
-    3. コードスニペット（Python, JSONなど）
-
-    応答の内容:
-    「{response_content}」
-
-    適した形式と理由を教えてください。
-    """
-    response = openai.Completion.create(
-        engine=deployment_name,
-        prompt=prompt,
-        max_tokens=150,
-        temperature=0.7
-    )
-    return response['choices'][0]['text'].strip()
+    try:
+        prompt = f"""
+        次の応答データに最適な出力形式を判断してください。
+        フォーマット候補:
+        1. 表形式 (ExcelまたはCSV)
+        2. 自然言語 (PDFまたはTXT)
+        3. コード (JSONまたはPython)
+        内容: {response_content}
+        """
+        response = openai.Completion.create(
+            engine=deployment_name,
+            prompt=prompt,
+            max_tokens=100,
+            temperature=0.5
+        )
+        return response['choices'][0]['text'].strip()
+    except Exception:
+        return "表形式"
 
 def generate_file(response_content, format_decision):
-    """
-    フォーマット判断に基づき適切なファイルを生成する関数
-    """
-    if "表形式" in format_decision:
-        rows = [row.split(",") for row in response_content.split("\n") if row]
-        df = pd.DataFrame(rows[1:], columns=rows[0])
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='Sheet1')
-        output.seek(0)
-        return output, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "output.xlsx"
+    try:
+        if "表形式" in format_decision:
+            rows = [row.split(",") for row in response_content.split("\n") if row]
+            df = pd.DataFrame(rows[1:], columns=rows[0])
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False, sheet_name='Sheet1')
+            output.seek(0)
+            return output, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "output.xlsx"
 
-    elif "自然言語" in format_decision:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        for line in response_content.split("\n"):
-            pdf.cell(200, 10, txt=line, ln=True, align='L')
-        output = BytesIO()
-        pdf.output(output)
-        output.seek(0)
-        return output, "application/pdf", "output.pdf"
+        elif "自然言語" in format_decision:
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+            for line in response_content.split("\n"):
+                pdf.cell(200, 10, txt=line, ln=True, align='L')
+            output = BytesIO()
+            pdf.output(output)
+            output.seek(0)
+            return output, "application/pdf", "output.pdf"
 
-    elif "コードスニペット" in format_decision:
-        output = BytesIO()
-        output.write(response_content.encode('utf-8'))
-        output.seek(0)
-        return output, "text/plain", "output.txt"
+        elif "コード" in format_decision:
+            output = BytesIO()
+            output.write(response_content.encode('utf-8'))
+            output.seek(0)
+            return output, "text/plain", "output.txt"
 
-    else:
-        output = BytesIO()
-        output.write(response_content.encode('utf-8'))
-        output.seek(0)
-        return output, "text/plain", "output.txt"
+    except Exception:
+        pass
+
+    # デフォルト: テキスト形式で返す
+    output = BytesIO()
+    output.write(response_content.encode('utf-8'))
+    output.seek(0)
+    return output, "text/plain", "output.txt"
 
 if __name__ == '__main__':
     app.run(debug=True)
