@@ -78,13 +78,9 @@ def process_files_and_prompt():
     if 'chat_history' not in session:
         session['chat_history'] = []
 
-    messages = [{"role": "system", "content": "あなたは有能なアシスタントです。"}]
-    for entry in session['chat_history']:
-        messages.append({"role": "user", "content": entry['user']})
-        messages.append({"role": "assistant", "content": entry['assistant']})
-
-    file_data_text = []
     try:
+        # ファイル処理
+        file_data_text = []
         for file in files:
             if file and file.filename.endswith('.xlsx'):
                 df = pd.read_excel(file, engine='openpyxl')
@@ -93,28 +89,17 @@ def process_files_and_prompt():
                 file_data_text.append(f"ファイル名: {file.filename}\n列: {columns}\n内容:\n{rows_text}")
 
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
+
+        # AIによる応答生成
         input_data = f"アップロードされたファイル内容:\n{file_contents}\nプロンプト:\n{prompt}"
+        response_content = generate_ai_response(input_data)
 
-        search_results = search_client.search(search_text=prompt, top=3)
-        relevant_docs = "\n".join(doc['chunk'] for doc in search_results)
-
-        input_data_with_search = f"{input_data}\n\n関連ドキュメント:\n{relevant_docs}"
-        messages.append({"role": "user", "content": input_data_with_search})
-
-        response = openai.ChatCompletion.create(
-            engine=deployment_name,
-            messages=messages,
-            max_tokens=2000
-        )
-
-        response_content = response['choices'][0]['message']['content']
-        session['response_content'] = response_content
-
+        # AIによる出力形式の判断
         file_format = determine_file_format(response_content)
 
         if file_format == "text":
             session['chat_history'].append({
-                'user': input_data_with_search,
+                'user': input_data,
                 'assistant': response_content
             })
             return render_template('index.html', chat_history=session['chat_history'])
@@ -124,6 +109,19 @@ def process_files_and_prompt():
 
     except Exception as e:
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
+
+def generate_ai_response(input_data):
+    messages = [
+        {"role": "system", "content": "あなたは有能なアシスタントです。"},
+        {"role": "user", "content": input_data}
+    ]
+
+    response = openai.ChatCompletion.create(
+        engine=deployment_name,
+        messages=messages,
+        max_tokens=2000
+    )
+    return response['choices'][0]['message']['content']
 
 def determine_file_format(response_content):
     prompt = f"""
