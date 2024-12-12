@@ -118,7 +118,7 @@ def process_files_and_prompt():
         })
 
         if file_part:
-            file_data = generate_file(file_part, file_format)
+            file_data, mimetype, filename = generate_file(file_part, file_format)
             return send_file(file_data, as_attachment=True, download_name=filename, mimetype=mimetype)
         else:
             return render_template('index.html', chat_history=session['chat_history'])
