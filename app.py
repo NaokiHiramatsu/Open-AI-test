@@ -110,61 +110,46 @@ def process_files_and_prompt():
         response_content = response['choices'][0]['message']['content']
         session['response_content'] = response_content
 
-        file_part, file_format, text_part = process_response_content(response_content)
+        file_format = determine_file_format(response_content)
 
-        session['chat_history'].append({
-            'user': input_data_with_search,
-            'assistant': text_part
-        })
-
-        if file_part:
-            file_data, mimetype, filename = generate_file(file_part, file_format)
-            return send_file(file_data, as_attachment=True, download_name=filename, mimetype=mimetype)
-        else:
+        if file_format == "text":
+            session['chat_history'].append({
+                'user': input_data_with_search,
+                'assistant': response_content
+            })
             return render_template('index.html', chat_history=session['chat_history'])
+        else:
+            file_data, mimetype, filename = generate_file(response_content, file_format)
+            return send_file(file_data, as_attachment=True, download_name=filename, mimetype=mimetype)
 
     except Exception as e:
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
 
-def process_response_content(response_content):
-    try:
-        prompt = f"""
-        以下のテキストを解析して、ファイルで返す部分と文章で返す部分に分けてください。
-        ファイル形式も指示してください（Excel, PDF, Wordなど）。
-        - ファイル形式で返す部分:
-        - 使用するファイル形式:
-        - 文章形式で返す部分:
+def determine_file_format(response_content):
+    prompt = f"""
+    以下の応答を基に、適切なファイル形式を選択してください。
+    可能な形式:
+    - Excel
+    - PDF
+    - Word
+    - Text
 
-        応答内容:
-        {response_content}
-        """
-        response = openai.Completion.create(
-            engine=deployment_name,
-            prompt=prompt,
-            max_tokens=300,
-            temperature=0.3
-        )
-        analysis = response['choices'][0]['text'].strip()
-
-        file_part, file_format, text_part = "", "", ""
-        for line in analysis.split("\n"):
-            if line.startswith("- ファイル形式で返す部分:"):
-                file_part = line.split(":")[1].strip()
-            elif line.startswith("- 使用するファイル形式:"):
-                file_format = line.split(":")[1].strip()
-            elif line.startswith("- 文章形式で返す部分:"):
-                text_part = line.split(":")[1].strip()
-
-        return file_part, file_format, text_part
-
-    except Exception:
-        return response_content, "text", ""
+    応答内容:
+    {response_content}
+    """
+    response = openai.Completion.create(
+        engine=deployment_name,
+        prompt=prompt,
+        max_tokens=50,
+        temperature=0.3
+    )
+    return response['choices'][0]['text'].strip()
 
 def generate_file(content, file_format):
     output = BytesIO()
 
     if file_format == "Excel":
-        rows = [row.split(",") for row in content.split("\n") if row]
+        rows = [row.split("\t") for row in content.split("\n") if row]
         df = pd.DataFrame(rows[1:], columns=rows[0])
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Sheet1')
