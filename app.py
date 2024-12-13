@@ -25,7 +25,7 @@ deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME", "default-deployment")
 
 search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "https://search-service.azure.com")
 search_service_key = os.getenv("AZURE_SEARCH_KEY", "your-search-key")
-index_name = "vector-1730110777868"
+index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "your-index-name")
 
 vision_subscription_key = os.getenv("VISION_API_KEY", "your-vision-key")
 vision_endpoint = os.getenv("VISION_ENDPOINT", "https://vision.azure.com")
