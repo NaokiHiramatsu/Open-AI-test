@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EY Chat</title>
     <style>
+        /* 既存のスタイルはそのまま */
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
@@ -56,7 +57,7 @@
             font-size: 18px;
         }
         .user-message {
-            background-color: #fff9d6; /* ユーザーの薄い黄色 */
+            background-color: #fff9d6;
             padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
@@ -68,7 +69,7 @@
             margin-left: auto;
         }
         .assistant-message {
-            background-color: #f2f2f2; /* AIの薄い灰色 */
+            background-color: #f2f2f2;
             padding: 15px;
             border-radius: 10px;
             margin: 10px 0;
@@ -164,6 +165,10 @@
                 </div>
             </form>
         </div>
+        <!-- ダウンロードリンクを表示 -->
+        {% if download_url %}
+            <p><a class="download-link" href="{{ download_url }}" target="_blank">生成されたファイルをダウンロード</a></p>
+        {% endif %}
     </div>
 </body>
 </html>
