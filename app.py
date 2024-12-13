@@ -115,24 +115,17 @@ def process_files_and_prompt():
             file_path = os.path.join('generated_files', temp_filename)
 
             # ファイル保存
-            try:
-                with open(file_path, 'wb') as f:
-                    file_data.seek(0)
-                    f.write(file_data.read())
-                print(f"File saved at: {file_path}")
-            except Exception as save_error:
-                print(f"Error saving file: {save_error}")
-                raise
+            with open(file_path, 'wb') as f:
+                file_data.seek(0)
+                f.write(file_data.read())
 
             # ダウンロードリンクを生成
             download_url = url_for('download_file', filename=temp_filename, _external=True)
-            print(f"Generated download URL: {download_url}")
 
             # セッションにリンクを格納
             session['chat_history'].append({
                 'user': input_data_with_context,
-                'assistant': f"以下のリンクから生成されたファイルをダウンロードできます： "
-                             f"<a href='{download_url}' target='_blank'>{filename}</a>"
+                'assistant': f"<a href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
             })
 
             return render_template('index.html', chat_history=session['chat_history'])
