@@ -48,34 +48,6 @@ def index():
     session.clear()
     return render_template('index.html', chat_history=[])
 
-@app.route('/ocr', methods=['POST'])
-def ocr_endpoint():
-    image_url = request.json.get("image_url")
-    if not image_url:
-        return jsonify({"error": "No image URL provided"}), 400
-
-    try:
-        text = ocr_image(image_url)
-        return jsonify({"text": text})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-def ocr_image(image_url):
-    ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
-    headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
-    params = {"language": "ja", "detectOrientation": "true"}
-    data = {"url": image_url}
-
-    response = requests.post(ocr_url, headers=headers, params=params, json=data)
-    response.raise_for_status()
-
-    ocr_results = response.json()
-    text_results = []
-    for region in ocr_results.get("regions", []):
-        for line in region.get("lines", []):
-            text_results.append(" ".join(word["text"] for word in line["words"]))
-    return "\n".join(text_results)
-
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
     files = request.files.getlist('files')
@@ -117,7 +89,6 @@ def process_files_and_prompt():
         # 出力形式判断
         output_decision = determine_file_format(response_content, format_model)
 
-        # デフォルト出力形式を設定
         if output_decision not in ["excel", "pdf", "word"]:
             output_decision = "text"
 
@@ -128,7 +99,7 @@ def process_files_and_prompt():
             })
             return render_template('index.html', chat_history=session['chat_history'])
         else:
-            # ファイル生成と一時保存
+            # ファイル生成と保存
             file_data, mimetype, filename = generate_file(response_content, output_decision)
             temp_filename = f"{uuid.uuid4()}.{output_decision}"
             file_path = os.path.join('generated_files', temp_filename)
@@ -139,8 +110,9 @@ def process_files_and_prompt():
 
             # ダウンロードリンクを生成
             download_url = url_for('download_file', filename=temp_filename, _external=True)
+            print(f"Generated download URL: {download_url}")  # デバッグ用
 
-            # AI応答としてリンクを含むメッセージを追加
+            # セッションにリンクを格納
             session['chat_history'].append({
                 'user': input_data_with_context,
                 'assistant': f"以下のリンクから生成されたファイルをダウンロードできます： "
