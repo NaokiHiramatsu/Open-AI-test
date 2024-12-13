@@ -124,24 +124,28 @@ def generate_ai_response(input_data):
     return response['choices'][0]['message']['content']
 
 def determine_file_format(response_content):
-    prompt = f"""
-    以下の応答を基に、適切なファイル形式を選択してください。
-    可能な形式:
-    - Excel
-    - PDF
-    - Word
-    - Text
+    try:
+        # フォーマットを判断するための別のAI呼び出し
+        prompt = f"""
+        以下の応答を基に、適切なファイル形式を選択してください。
+        可能な形式:
+        - Excel
+        - PDF
+        - Word
+        - Text
 
-    応答内容:
-    {response_content}
-    """
-    response = openai.Completion.create(
-        engine=deployment_name,
-        prompt=prompt,
-        max_tokens=50,
-        temperature=0.3
-    )
-    return response['choices'][0]['text'].strip()
+        応答内容:
+        {response_content}
+        """
+        response = openai.Completion.create(
+            engine=deployment_name,
+            prompt=prompt,
+            max_tokens=50,
+            temperature=0.3
+        )
+        return response['choices'][0]['text'].strip()
+    except Exception:
+        return "text"
 
 def generate_file(content, file_format):
     output = BytesIO()
