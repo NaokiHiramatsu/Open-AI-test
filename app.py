@@ -120,9 +120,8 @@ def process_files_and_prompt():
                 f.write(file_data.read())
 
             # ダウンロードリンクを生成
-            base_url = request.host_url.rstrip('/')
-            download_url = f"{base_url}/download/{temp_filename}"
-            print(f"Generated download URL: {download_url}")  # デバッグログ
+            download_url = url_for('download_file', filename=temp_filename, _external=True)
+            print(f"Generated download URL: {download_url}")  # デバッグ用
 
             # セッションにリンクを格納
             session['chat_history'].append({
@@ -151,9 +150,8 @@ def generate_ai_response(input_data, deployment_name):
         {
             "role": "system",
             "content": (
-                "あなたは、システム内で直接ファイルを生成することが可能な有能なアシスタントです。"
-                "ユーザーから提供されたデータやプロンプトに基づき、HTMLの<a>タグを使用してダウンロードリンクを提供してください。"
-                "例: <a href='http://example.com/download/filename.xlsx' target='_blank'>ファイルをダウンロード</a>"
+                "あなたは、システム内で直接ファイルを生成し、正しいダウンロードリンクをHTML <a>タグで提供します。"
+                "Flaskの/downloadエンドポイントを使用してリンクを生成してください。"
             )
         },
         {"role": "user", "content": input_data}
