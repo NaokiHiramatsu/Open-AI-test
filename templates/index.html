@@ -151,7 +151,9 @@
             {% if chat_history %}
                 {% for entry in chat_history %}
                     <div class="user-message">ユーザー: {{ entry['user'] }}</div>
-                    <div class="assistant-message">生成AI: {{ entry['assistant'] | safe }}</div>
+                    <div class="assistant-message">
+                        生成AI: {{ entry['assistant'] | safe }}
+                    </div>
                 {% endfor %}
             {% endif %}
         </div>
