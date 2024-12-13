@@ -21,7 +21,8 @@ openai.api_type = "azure"
 openai.api_base = os.getenv("OPENAI_API_BASE", "https://example.openai.azure.com")
 openai.api_version = "2024-08-01-preview"
 openai.api_key = os.getenv("OPENAI_API_KEY", "your-api-key")
-deployment_name = os.getenv("OPENAI_DEPLOYMENT_NAME", "default-deployment")
+response_model = os.getenv("OPENAI_RESPONSE_MODEL", "response-model")
+format_model = os.getenv("OPENAI_FORMAT_MODEL", "format-model")
 
 search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "https://search-service.azure.com")
 search_service_key = os.getenv("AZURE_SEARCH_KEY", "your-search-key")
@@ -105,8 +106,11 @@ def process_files_and_prompt():
             f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
         )
 
-        # 生成AIによる判断
-        response_content, output_decision = generate_ai_response_with_decision(input_data_with_context)
+        # 応答生成
+        response_content = generate_ai_response(input_data_with_context, response_model)
+
+        # 出力形式判断
+        output_decision = determine_file_format(response_content, format_model)
 
         if output_decision == "text":
             session['chat_history'].append({
@@ -121,24 +125,26 @@ def process_files_and_prompt():
     except Exception as e:
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
 
-def generate_ai_response_with_decision(input_data):
-    """生成AIで応答と出力形式の判断を生成"""
+def generate_ai_response(input_data, deployment_name):
+    """応答生成を担当するAI"""
     messages = [
         {"role": "system", "content": "あなたは有能なアシスタントです。"},
         {"role": "user", "content": input_data}
     ]
-
     try:
-        # 応答生成
         response = openai.ChatCompletion.create(
             engine=deployment_name,
             messages=messages,
             max_tokens=2000
         )
-        response_content = response['choices'][0]['message']['content']
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        return f"ChatGPT 呼び出し中にエラーが発生しました: {str(e)}"
 
-        # 出力形式の判断
-        format_prompt = f"""
+def determine_file_format(response_content, deployment_name):
+    """出力形式の判断を担当するAI"""
+    try:
+        prompt = f"""
         以下の応答を基に、どの出力形式が適切か選択してください。
         - "text" （テキストで返す）
         - "Excel" （Excelファイルで出力）
@@ -148,16 +154,15 @@ def generate_ai_response_with_decision(input_data):
         応答内容:
         {response_content}
         """
-        format_response = openai.Completion.create(
+        response = openai.Completion.create(
             engine=deployment_name,
-            prompt=format_prompt,
+            prompt=prompt,
             max_tokens=50,
             temperature=0.3
         )
-        output_decision = format_response['choices'][0]['text'].strip().lower()
-        return response_content, output_decision
-    except Exception as e:
-        return f"ChatGPT 呼び出し中にエラーが発生しました: {str(e)}", "text"
+        return response['choices'][0]['text'].strip().lower()
+    except Exception:
+        return "text"
 
 def generate_file(content, file_format):
     output = BytesIO()
