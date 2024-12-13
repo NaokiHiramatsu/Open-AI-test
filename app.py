@@ -79,6 +79,9 @@ def process_files_and_prompt():
         session['chat_history'] = []
 
     try:
+        # ログ: プロンプト確認
+        print(f"Prompt received: {prompt}")
+
         # ファイル処理
         file_data_text = []
         for file in files:
@@ -100,27 +103,36 @@ def process_files_and_prompt():
                 relevant_docs.append("該当するデータがありません")
         relevant_docs_text = "\n".join(relevant_docs)
 
-        # AIへの入力データ生成
-        if not relevant_docs_text.strip():
-            relevant_docs_text = "関連するドキュメントは見つかりませんでした。"
+        # ログ: 検索結果確認
+        print(f"Search results: {relevant_docs_text}")
 
+        # AIへの入力データ生成
         input_data_with_search = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}"
         response_content = generate_ai_response(input_data_with_search)
+
+        # ログ: AI応答確認
+        print(f"AI response: {response_content}")
 
         # 出力形式の判断
         file_format = determine_file_format(response_content)
 
+        # チャット履歴に追加
+        session['chat_history'].append({
+            'user': input_data_with_search,
+            'assistant': response_content
+        })
+        # ログ: チャット履歴確認
+        print(f"Session history updated: {session['chat_history']}")
+
+        # レスポンスの生成
         if file_format == "text":
-            session['chat_history'].append({
-                'user': input_data_with_search,
-                'assistant': response_content
-            })
             return render_template('index.html', chat_history=session['chat_history'])
         else:
             file_data, mimetype, filename = generate_file(response_content, file_format)
             return send_file(file_data, as_attachment=True, download_name=filename, mimetype=mimetype)
 
     except Exception as e:
+        print(f"Error occurred: {e}")
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
 
 def generate_ai_response(input_data):
