@@ -125,7 +125,7 @@ def process_files_and_prompt():
             # セッションにリンクを格納
             session['chat_history'].append({
                 'user': input_data_with_context,
-                'assistant': f"<a href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
+                'assistant': f"<a class='download-link' href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
             })
 
             return render_template('index.html', chat_history=session['chat_history'])
