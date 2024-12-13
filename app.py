@@ -140,9 +140,11 @@ def process_files_and_prompt():
             # ダウンロードリンクを生成
             download_url = url_for('download_file', filename=temp_filename, _external=True)
 
+            # AI応答としてリンクを含むメッセージを追加
             session['chat_history'].append({
                 'user': input_data_with_context,
-                'assistant': f"以下のリンクからダウンロードしてください： <a href='{download_url}' target='_blank'>{filename}</a>"
+                'assistant': f"以下のリンクから生成されたファイルをダウンロードできます： "
+                             f"<a href='{download_url}' target='_blank'>{filename}</a>"
             })
 
             return render_template('index.html', chat_history=session['chat_history'])
