@@ -29,6 +29,21 @@ search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "https://search-ser
 search_service_key = os.getenv("AZURE_SEARCH_KEY", "your-search-key")
 index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "your-index-name")
 
+# Azure Search クライアントの設定
+try:
+    if not all([search_service_endpoint, search_service_key, index_name]):
+        raise ValueError("Azure Search の環境変数が正しく設定されていません。")
+
+    search_client = SearchClient(
+        endpoint=search_service_endpoint,
+        index_name=index_name,
+        credential=AzureKeyCredential(search_service_key)
+    )
+    print("Search client initialized successfully.")
+except Exception as e:
+    search_client = None
+    print(f"SearchClient initialization failed: {e}")
+
 # 一時ファイル保存ディレクトリを作成
 if not os.path.exists('generated_files'):
     os.makedirs('generated_files')
@@ -45,6 +60,11 @@ def process_files_and_prompt():
 
     if 'chat_history' not in session:
         session['chat_history'] = []
+
+    if search_client is None:
+        error_message = "SearchClient が初期化されていません。サーバー設定を確認してください。"
+        print(error_message)
+        return jsonify({"error": error_message}), 500
 
     try:
         # ファイル処理
@@ -99,14 +119,14 @@ def process_files_and_prompt():
                 with open(file_path, 'wb') as f:
                     file_data.seek(0)
                     f.write(file_data.read())
-                print(f"File saved at: {file_path}")  # デバッグ用
+                print(f"File saved at: {file_path}")
             except Exception as save_error:
                 print(f"Error saving file: {save_error}")
                 raise
 
             # ダウンロードリンクを生成
             download_url = url_for('download_file', filename=temp_filename, _external=True)
-            print(f"Generated download URL: {download_url}")  # デバッグ用
+            print(f"Generated download URL: {download_url}")
 
             # セッションにリンクを格納
             session['chat_history'].append({
@@ -127,7 +147,7 @@ def download_file(filename):
     if os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
     else:
-        print(f"File not found: {file_path}")  # デバッグ用
+        print(f"File not found: {file_path}")
         return "File not found", 404
 
 def generate_ai_response(input_data, deployment_name):
