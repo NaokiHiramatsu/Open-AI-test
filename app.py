@@ -1,5 +1,6 @@
 import os
-from flask import Flask, request, jsonify, render_template, session, send_file
+import uuid
+from flask import Flask, request, jsonify, render_template, session, send_file, url_for
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 import openai
@@ -37,6 +38,10 @@ search_client = SearchClient(
     index_name=index_name,
     credential=AzureKeyCredential(search_service_key)
 )
+
+# 一時ファイル保存ディレクトリを作成
+if not os.path.exists('generated_files'):
+    os.makedirs('generated_files')
 
 @app.route('/')
 def index():
@@ -123,11 +128,30 @@ def process_files_and_prompt():
             })
             return render_template('index.html', chat_history=session['chat_history'])
         else:
+            # ファイル生成と一時保存
             file_data, mimetype, filename = generate_file(response_content, output_decision)
-            return send_file(file_data, as_attachment=True, download_name=filename, mimetype=mimetype)
+            temp_filename = f"{uuid.uuid4()}.{output_decision}"
+            file_path = os.path.join('generated_files', temp_filename)
+
+            with open(file_path, 'wb') as f:
+                file_data.seek(0)
+                f.write(file_data.read())
+
+            # ダウンロードリンクを生成
+            download_url = url_for('download_file', filename=temp_filename, _external=True)
+
+            return render_template('index.html', chat_history=session['chat_history'], download_url=download_url)
 
     except Exception as e:
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
+
+@app.route('/download/<filename>')
+def download_file(filename):
+    file_path = os.path.join('generated_files', filename)
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True)
+    else:
+        return "File not found", 404
 
 def generate_ai_response(input_data, deployment_name):
     """応答生成を担当するAI"""
