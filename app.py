@@ -150,11 +150,8 @@ def generate_ai_response(input_data, deployment_name):
             "role": "system",
             "content": (
                 "あなたは、システム内で直接ファイルを生成することが可能な有能なアシスタントです。"
-                "ユーザーから提供されたデータやプロンプトに基づき、以下の形式でファイルを生成してください:"
-                " - 'Excel'（Excelファイルで出力）"
-                " - 'PDF'（PDFファイルで出力）"
-                " - 'Word'（Wordファイルで出力）"
-                "出力可能なファイル形式がない場合でも、スクリプトの例ではなく明確な理由をユーザーに伝えてください。"
+                "ユーザーから提供されたデータやプロンプトに基づき、HTMLの<a>タグを使用してダウンロードリンクを提供してください。"
+                " - 例: <a href='http://example.com/download/filename.xlsx' target='_blank'>ファイルをダウンロード</a>"
             )
         },
         {"role": "user", "content": input_data}
