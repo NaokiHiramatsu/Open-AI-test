@@ -90,16 +90,29 @@ def process_files_and_prompt():
 
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
-        # AIによる応答生成
-        input_data = f"アップロードされたファイル内容:\n{file_contents}\nプロンプト:\n{prompt}"
-        response_content = generate_ai_response(input_data)
+        # Azure Search 呼び出し
+        search_results = search_client.search(search_text=prompt, top=3)
+        relevant_docs = []
+        for doc in search_results:
+            if 'chunk' in doc:
+                relevant_docs.append(doc['chunk'])
+            else:
+                relevant_docs.append("該当するデータがありません")
+        relevant_docs_text = "\n".join(relevant_docs)
 
-        # AIによる出力形式の判断
+        # AIへの入力データ生成
+        if not relevant_docs_text.strip():
+            relevant_docs_text = "関連するドキュメントは見つかりませんでした。"
+
+        input_data_with_search = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}"
+        response_content = generate_ai_response(input_data_with_search)
+
+        # 出力形式の判断
         file_format = determine_file_format(response_content)
 
         if file_format == "text":
             session['chat_history'].append({
-                'user': input_data,
+                'user': input_data_with_search,
                 'assistant': response_content
             })
             return render_template('index.html', chat_history=session['chat_history'])
@@ -116,12 +129,15 @@ def generate_ai_response(input_data):
         {"role": "user", "content": input_data}
     ]
 
-    response = openai.ChatCompletion.create(
-        engine=deployment_name,
-        messages=messages,
-        max_tokens=2000
-    )
-    return response['choices'][0]['message']['content']
+    try:
+        response = openai.ChatCompletion.create(
+            engine=deployment_name,
+            messages=messages,
+            max_tokens=2000
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        return f"ChatGPT 呼び出し中にエラーが発生しました: {str(e)}"
 
 def determine_file_format(response_content):
     try:
