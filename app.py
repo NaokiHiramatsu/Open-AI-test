@@ -79,9 +79,6 @@ def process_files_and_prompt():
         session['chat_history'] = []
 
     try:
-        # ログ: プロンプト確認
-        print(f"Prompt received: {prompt}")
-
         # ファイル処理
         file_data_text = []
         for file in files:
@@ -103,94 +100,81 @@ def process_files_and_prompt():
                 relevant_docs.append("該当するデータがありません")
         relevant_docs_text = "\n".join(relevant_docs)
 
-        # ログ: 検索結果確認
-        print(f"Search results: {relevant_docs_text}")
-
         # AIへの入力データ生成
-        input_data_with_search = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}"
-        response_content = generate_ai_response(input_data_with_search)
+        input_data_with_context = (
+            f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
+        )
 
-        # ログ: AI応答確認
-        print(f"AI response: {response_content}")
+        # 生成AIによる判断
+        response_content, output_decision = generate_ai_response_with_decision(input_data_with_context)
 
-        # 出力形式の判断
-        file_format = determine_file_format(response_content)
-
-        # チャット履歴に追加
-        session['chat_history'].append({
-            'user': input_data_with_search,
-            'assistant': response_content
-        })
-        # ログ: チャット履歴確認
-        print(f"Session history updated: {session['chat_history']}")
-
-        # レスポンスの生成
-        if file_format == "text":
+        if output_decision == "text":
+            session['chat_history'].append({
+                'user': input_data_with_context,
+                'assistant': response_content
+            })
             return render_template('index.html', chat_history=session['chat_history'])
         else:
-            file_data, mimetype, filename = generate_file(response_content, file_format)
+            file_data, mimetype, filename = generate_file(response_content, output_decision)
             return send_file(file_data, as_attachment=True, download_name=filename, mimetype=mimetype)
 
     except Exception as e:
-        print(f"Error occurred: {e}")
         return jsonify({"error": f"エラーが発生しました: {str(e)}"}), 500
 
-def generate_ai_response(input_data):
+def generate_ai_response_with_decision(input_data):
+    """生成AIで応答と出力形式の判断を生成"""
     messages = [
         {"role": "system", "content": "あなたは有能なアシスタントです。"},
         {"role": "user", "content": input_data}
     ]
 
     try:
+        # 応答生成
         response = openai.ChatCompletion.create(
             engine=deployment_name,
             messages=messages,
             max_tokens=2000
         )
-        return response['choices'][0]['message']['content']
-    except Exception as e:
-        return f"ChatGPT 呼び出し中にエラーが発生しました: {str(e)}"
+        response_content = response['choices'][0]['message']['content']
 
-def determine_file_format(response_content):
-    try:
-        # フォーマットを判断するための別のAI呼び出し
-        prompt = f"""
-        以下の応答を基に、適切なファイル形式を選択してください。
-        可能な形式:
-        - Excel
-        - PDF
-        - Word
-        - Text
+        # 出力形式の判断
+        format_prompt = f"""
+        以下の応答を基に、どの出力形式が適切か選択してください。
+        - "text" （テキストで返す）
+        - "Excel" （Excelファイルで出力）
+        - "PDF" （PDFファイルで出力）
+        - "Word" （Wordファイルで出力）
 
         応答内容:
         {response_content}
         """
-        response = openai.Completion.create(
+        format_response = openai.Completion.create(
             engine=deployment_name,
-            prompt=prompt,
+            prompt=format_prompt,
             max_tokens=50,
             temperature=0.3
         )
-        return response['choices'][0]['text'].strip()
-    except Exception:
-        return "text"
+        output_decision = format_response['choices'][0]['text'].strip().lower()
+        return response_content, output_decision
+    except Exception as e:
+        return f"ChatGPT 呼び出し中にエラーが発生しました: {str(e)}", "text"
 
 def generate_file(content, file_format):
     output = BytesIO()
 
-    if file_format == "Excel":
+    if file_format == "excel":
         rows = [row.split("\t") for row in content.split("\n") if row]
         df = pd.DataFrame(rows[1:], columns=rows[0])
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Sheet1')
-    elif file_format == "PDF":
+    elif file_format == "pdf":
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=12)
         for line in content.split("\n"):
             pdf.cell(200, 10, txt=line, ln=True, align='L')
         pdf.output(output)
-    elif file_format == "Word":
+    elif file_format == "word":
         doc = Document()
         for line in content.split("\n"):
             doc.add_paragraph(line)
@@ -199,11 +183,11 @@ def generate_file(content, file_format):
         output.write(content.encode('utf-8'))
 
     output.seek(0)
-    if file_format == "Excel":
+    if file_format == "excel":
         return output, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "output.xlsx"
-    elif file_format == "PDF":
+    elif file_format == "pdf":
         return output, "application/pdf", "output.pdf"
-    elif file_format == "Word":
+    elif file_format == "word":
         return output, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "output.docx"
     else:
         return output, "text/plain", "output.txt"
