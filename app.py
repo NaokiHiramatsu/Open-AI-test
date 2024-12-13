@@ -112,6 +112,10 @@ def process_files_and_prompt():
         # 出力形式判断
         output_decision = determine_file_format(response_content, format_model)
 
+        # デフォルト出力形式を設定
+        if output_decision not in ["excel", "pdf", "word"]:
+            output_decision = "text"
+
         if output_decision == "text":
             session['chat_history'].append({
                 'user': input_data_with_context,
@@ -128,7 +132,17 @@ def process_files_and_prompt():
 def generate_ai_response(input_data, deployment_name):
     """応答生成を担当するAI"""
     messages = [
-        {"role": "system", "content": "あなたは有能なアシスタントです。"},
+        {
+            "role": "system",
+            "content": (
+                "あなたは、システム内で直接ファイルを生成することが可能な有能なアシスタントです。"
+                "ユーザーから提供されたデータやプロンプトに基づき、以下の形式でファイルを生成してください:"
+                " - 'Excel'（Excelファイルで出力）"
+                " - 'PDF'（PDFファイルで出力）"
+                " - 'Word'（Wordファイルで出力）"
+                "出力可能なファイル形式がない場合でも、スクリプトの例ではなく明確な理由をユーザーに伝えてください。"
+            )
+        },
         {"role": "user", "content": input_data}
     ]
     try:
@@ -145,11 +159,11 @@ def determine_file_format(response_content, deployment_name):
     """出力形式の判断を担当するAI"""
     try:
         prompt = f"""
-        以下の応答を基に、どの出力形式が適切か選択してください。
-        - "text" （テキストで返す）
-        - "Excel" （Excelファイルで出力）
-        - "PDF" （PDFファイルで出力）
-        - "Word" （Wordファイルで出力）
+        以下の応答を基に、どの出力形式が適切か選択してください。必ず1つを選んでください。
+        - "text" （テキスト形式で返す場合に選択）
+        - "Excel" （Excelファイルが適切な場合に選択）
+        - "PDF" （PDFファイルが適切な場合に選択）
+        - "Word" （Wordファイルが適切な場合に選択）
 
         応答内容:
         {response_content}
