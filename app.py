@@ -70,8 +70,10 @@ def process_files_and_prompt():
         return jsonify({"error": error_message}), 500
 
     try:
-        # ファイル処理
+        # ファイル処理とダウンロードリンク生成
         file_data_text = []
+        generated_links = []
+
         for file in files:
             if file and file.filename.endswith('.xlsx'):
                 df = pd.read_excel(file, engine='openpyxl')
@@ -79,7 +81,7 @@ def process_files_and_prompt():
                 rows_text = df.to_string(index=False)
                 file_data_text.append(f"ファイル名: {file.filename}\n列: {columns}\n内容:\n{rows_text}")
             elif file and file.filename.endswith(('.png', '.jpg', '.jpeg')):
-                # 画像ファイルの場合OCRを実行
+                # OCRの実行
                 image_data = file.read()
                 image_url = save_image_to_temp(image_data)
                 ocr_text = ocr_image(image_url)
@@ -105,40 +107,19 @@ def process_files_and_prompt():
         # 応答生成
         response_content = generate_ai_response(input_data_with_context, response_model)
 
-        # 出力形式判断
+        # 出力形式判断とファイル生成
         output_decision = determine_file_format(response_content, format_model)
+        file_data, mimetype, filename = generate_file(response_content, output_decision)
+        saved_file = save_file(file_data, output_decision)
+        download_url = url_for('download_file', filename=saved_file, _external=True)
 
-        if output_decision not in ["excel", "pdf", "word"]:
-            output_decision = "text"
+        # セッションにリンクを格納
+        session['chat_history'].append({
+            'user': input_data_with_context,
+            'assistant': f"<a class='download-link' href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
+        })
 
-        if output_decision == "text":
-            session['chat_history'].append({
-                'user': input_data_with_context,
-                'assistant': response_content
-            })
-            return render_template('index.html', chat_history=session['chat_history'])
-        else:
-            # ファイル生成と保存
-            file_data, mimetype, filename = generate_file(response_content, output_decision)
-            temp_filename = f"{uuid.uuid4()}.{output_decision}"
-            file_path = os.path.join('generated_files', temp_filename)
-
-            # ファイル保存
-            with open(file_path, 'wb') as f:
-                file_data.seek(0)
-                f.write(file_data.read())
-
-            # ダウンロードリンクを生成
-            download_url = url_for('download_file', filename=temp_filename, _external=True)
-            print(f"Generated download URL: {download_url}")  # デバッグ用
-
-            # セッションにリンクを格納
-            session['chat_history'].append({
-                'user': input_data_with_context,
-                'assistant': f"<a class='download-link' href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
-            })
-
-            return render_template('index.html', chat_history=session['chat_history'])
+        return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
         print(f"Error in process_files_and_prompt: {e}")
@@ -187,15 +168,12 @@ def generate_ai_response(input_data, deployment_name):
         },
         {"role": "user", "content": input_data}
     ]
-    try:
-        response = openai.ChatCompletion.create(
-            engine=deployment_name,
-            messages=messages,
-            max_tokens=2000
-        )
-        return response['choices'][0]['message']['content']
-    except Exception as e:
-        return f"ChatGPT 呼び出し中にエラーが発生しました: {str(e)}"
+    response = openai.ChatCompletion.create(
+        engine=deployment_name,
+        messages=messages,
+        max_tokens=2000
+    )
+    return response['choices'][0]['message']['content']
 
 def determine_file_format(response_content, deployment_name):
     prompt = f"""
@@ -208,15 +186,12 @@ def determine_file_format(response_content, deployment_name):
     応答内容:
     {response_content}
     """
-    try:
-        response = openai.Completion.create(
-            engine=deployment_name,
-            prompt=prompt,
-            max_tokens=50
-        )
-        return response['choices'][0]['text'].strip().lower()
-    except Exception:
-        return "text"
+    response = openai.Completion.create(
+        engine=deployment_name,
+        prompt=prompt,
+        max_tokens=50
+    )
+    return response['choices'][0]['text'].strip().lower()
 
 def generate_file(content, file_format):
     output = BytesIO()
@@ -243,6 +218,14 @@ def generate_file(content, file_format):
 
     output.seek(0)
     return output, f"application/{file_format}", f"output.{file_format}"
+
+def save_file(data, extension):
+    filename = f"{uuid.uuid4()}.{extension}"
+    file_path = os.path.join('generated_files', filename)
+    with open(file_path, 'wb') as f:
+        data.seek(0)
+        f.write(data.read())
+    return filename
 
 if __name__ == '__main__':
     app.run(debug=True)
