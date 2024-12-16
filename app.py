@@ -31,21 +31,6 @@ index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "your-index-name")
 vision_subscription_key = os.getenv("VISION_API_KEY", "your-vision-key")
 vision_endpoint = os.getenv("VISION_ENDPOINT", "https://vision.azure.com")
 
-# Azure Search クライアントの設定
-try:
-    if not all([search_service_endpoint, search_service_key, index_name]):
-        raise ValueError("Azure Search の環境変数が正しく設定されていません。")
-
-    search_client = SearchClient(
-        endpoint=search_service_endpoint,
-        index_name=index_name,
-        credential=AzureKeyCredential(search_service_key)
-    )
-    print("Search client initialized successfully.")
-except Exception as e:
-    search_client = None
-    print(f"SearchClient initialization failed: {e}")
-
 # 一時ファイル保存ディレクトリを作成
 SAVE_DIR = "generated_files"
 if not os.path.exists(SAVE_DIR):
@@ -63,11 +48,6 @@ def process_files_and_prompt():
 
     if 'chat_history' not in session:
         session['chat_history'] = []
-
-    if search_client is None:
-        error_message = "SearchClient が初期化されていません。サーバー設定を確認してください。"
-        print(error_message)
-        return jsonify({"error": error_message}), 500
 
     try:
         # ファイル処理
@@ -94,17 +74,9 @@ def process_files_and_prompt():
         input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
         response_content, output_format = generate_ai_response_and_format(input_data, response_model)
 
-        # ファイル生成と保存（正しい拡張子設定）
+        # ファイル生成と保存
         file_data, mime_type, file_format = generate_file(response_content, output_format)
-        if file_format == "excel":
-            temp_filename = f"{uuid.uuid4()}.xlsx"
-        elif file_format == "pdf":
-            temp_filename = f"{uuid.uuid4()}.pdf"
-        elif file_format == "word":
-            temp_filename = f"{uuid.uuid4()}.docx"
-        else:
-            temp_filename = f"{uuid.uuid4()}.txt"
-
+        temp_filename = f"{uuid.uuid4()}.{file_format}"
         file_path = os.path.join(SAVE_DIR, temp_filename)
         with open(file_path, 'wb') as f:
             file_data.seek(0)
@@ -127,12 +99,27 @@ def download_file(filename):
     if not file_path.startswith(os.path.abspath(SAVE_DIR)):
         print(f"Invalid file path: {file_path}")
         return "Invalid file path", 400
+
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         try:
-            return send_file(file_path, as_attachment=True)
+            # MIMEタイプの設定
+            mimetype_map = {
+                'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'pdf': 'application/pdf',
+                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'txt': 'text/plain',
+                'png': 'image/png',
+                'jpg': 'image/jpeg'
+            }
+            ext = filename.split('.')[-1]
+            mimetype = mimetype_map.get(ext, 'application/octet-stream')
+
+            return send_file(file_path, mimetype=mimetype, as_attachment=True, download_name=filename)
         except Exception as e:
             print(f"Error sending file: {e}")
             return "ファイル送信中にエラーが発生しました。", 500
+
+    print(f"File not found or empty: {file_path}")
     return "File not found or file is empty", 404
 
 def save_image_to_temp(image_data):
@@ -165,14 +152,14 @@ def generate_ai_response_and_format(input_data, deployment_name):
     return response_text, output_format
 
 def determine_output_format_from_response(response_content):
-    if "excel" in response_content.lower(): return "excel"
+    if "excel" in response_content.lower(): return "xlsx"
     if "pdf" in response_content.lower(): return "pdf"
-    if "word" in response_content.lower(): return "word"
-    return "text"
+    if "word" in response_content.lower(): return "docx"
+    return "txt"
 
 def generate_file(content, file_format):
     output = BytesIO()
-    if file_format == "excel":
+    if file_format == "xlsx":
         pd.DataFrame([[content]]).to_excel(output, index=False, engine='xlsxwriter')
     elif file_format == "pdf":
         pdf = FPDF()
@@ -180,7 +167,7 @@ def generate_file(content, file_format):
         pdf.set_font("Arial", size=12)
         pdf.multi_cell(0, 10, content)
         pdf.output(output)
-    elif file_format == "word":
+    elif file_format == "docx":
         doc = Document()
         doc.add_paragraph(content)
         doc.save(output)
