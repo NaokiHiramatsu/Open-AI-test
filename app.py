@@ -23,11 +23,13 @@ openai.api_base = os.getenv("OPENAI_API_BASE", "https://example.openai.azure.com
 openai.api_version = "2024-08-01-preview"
 openai.api_key = os.getenv("OPENAI_API_KEY", "your-api-key")
 response_model = os.getenv("OPENAI_RESPONSE_MODEL", "response-model")
-format_model = os.getenv("OPENAI_FORMAT_MODEL", "format-model")
 
 search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "https://search-service.azure.com")
 search_service_key = os.getenv("AZURE_SEARCH_KEY", "your-search-key")
 index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "your-index-name")
+
+vision_subscription_key = os.getenv("VISION_API_KEY", "your-vision-key")
+vision_endpoint = os.getenv("VISION_ENDPOINT", "https://vision.azure.com")
 
 # Azure Search クライアントの設定
 try:
@@ -75,6 +77,11 @@ def process_files_and_prompt():
                 columns = df.columns.tolist()
                 rows_text = df.to_string(index=False)
                 file_data_text.append(f"ファイル名: {file.filename}\n列: {columns}\n内容:\n{rows_text}")
+            elif file and file.filename.endswith(('.png', '.jpg', '.jpeg')):
+                image_data = file.read()
+                image_url = save_image_to_temp(image_data)
+                ocr_text = ocr_image(image_url)
+                file_data_text.append(f"ファイル名: {file.filename}\nOCR抽出内容:\n{ocr_text}")
 
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
@@ -88,16 +95,11 @@ def process_files_and_prompt():
                 relevant_docs.append("該当するデータがありません")
         relevant_docs_text = "\n".join(relevant_docs)
 
-        # AIへの入力データ生成
+        # AIへの入力データ生成と応答
         input_data_with_context = (
             f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
         )
-
-        # 応答生成
-        response_content = generate_ai_response(input_data_with_context, response_model)
-
-        # 出力形式判断
-        output_decision = determine_file_format(response_content, format_model)
+        response_content, output_decision = generate_ai_response_and_format(input_data_with_context, response_model)
 
         if output_decision not in ["excel", "pdf", "word"]:
             output_decision = "text"
@@ -144,14 +146,37 @@ def download_file(filename):
         print(f"File not found: {file_path}")
         return "File not found", 404
 
-def generate_ai_response(input_data, deployment_name):
-    """応答生成を担当するAI"""
+def save_image_to_temp(image_data):
+    temp_filename = f"{uuid.uuid4()}.png"
+    temp_path = os.path.join('generated_files', temp_filename)
+    with open(temp_path, 'wb') as f:
+        f.write(image_data)
+    return temp_path
+
+def ocr_image(image_url):
+    ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
+    headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
+    params = {"language": "ja", "detectOrientation": "true"}
+    data = {"url": image_url}
+
+    response = requests.post(ocr_url, headers=headers, params=params, json=data)
+    response.raise_for_status()
+
+    ocr_results = response.json()
+    text_results = []
+    for region in ocr_results.get("regions", []):
+        for line in region.get("lines", []):
+            text_results.append(" ".join(word["text"] for word in line["words"]))
+    return "\n".join(text_results)
+
+def generate_ai_response_and_format(input_data, deployment_name):
+    """応答生成と出力形式判断をAIに依頼"""
     messages = [
         {
             "role": "system",
             "content": (
-                "あなたは、システム内で直接ファイルを生成し、正しいダウンロードリンクをHTML <a>タグで提供します。"
-                "Flaskの/downloadエンドポイントを使用してリンクを生成してください。"
+                "あなたは、システム内で直接ファイルを生成し、適切な形式（text, Excel, PDF, Word）を判断し生成します。"
+                "Flaskの/downloadエンドポイントを使用してリンクをHTML <a>タグで提供してください。"
             )
         },
         {"role": "user", "content": input_data}
@@ -162,31 +187,21 @@ def generate_ai_response(input_data, deployment_name):
             messages=messages,
             max_tokens=2000
         )
-        return response['choices'][0]['message']['content']
+        response_text = response['choices'][0]['message']['content']
+        output_format = determine_output_format_from_response(response_text)
+        return response_text, output_format
     except Exception as e:
-        return f"ChatGPT 呼び出し中にエラーが発生しました: {str(e)}"
+        return f"ChatGPT 呼び出し中にエラーが発生しました: {str(e)}", "text"
 
-def determine_file_format(response_content, deployment_name):
-    """出力形式の判断を担当するAI"""
-    try:
-        prompt = f"""
-        以下の応答を基に、どの出力形式が適切か選択してください。必ず1つを選んでください。
-        - "text" （テキスト形式で返す場合に選択）
-        - "Excel" （Excelファイルが適切な場合に選択）
-        - "PDF" （PDFファイルが適切な場合に選択）
-        - "Word" （Wordファイルが適切な場合に選択）
-
-        応答内容:
-        {response_content}
-        """
-        response = openai.Completion.create(
-            engine=deployment_name,
-            prompt=prompt,
-            max_tokens=50,
-            temperature=0.3
-        )
-        return response['choices'][0]['text'].strip().lower()
-    except Exception:
+def determine_output_format_from_response(response_content):
+    """AI応答から出力形式を簡易的に判断"""
+    if "excel" in response_content.lower():
+        return "excel"
+    elif "pdf" in response_content.lower():
+        return "pdf"
+    elif "word" in response_content.lower():
+        return "word"
+    else:
         return "text"
 
 def generate_file(content, file_format):
@@ -213,14 +228,7 @@ def generate_file(content, file_format):
         output.write(content.encode('utf-8'))
 
     output.seek(0)
-    if file_format == "excel":
-        return output, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "output.xlsx"
-    elif file_format == "pdf":
-        return output, "application/pdf", "output.pdf"
-    elif file_format == "word":
-        return output, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "output.docx"
-    else:
-        return output, "text/plain", "output.txt"
+    return output, f"application/{file_format}", f"output.{file_format}"
 
 if __name__ == '__main__':
     app.run(debug=True)
