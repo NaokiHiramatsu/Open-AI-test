@@ -91,19 +91,26 @@ def process_files_and_prompt():
         input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
         response_content, output_format = generate_ai_response_and_format(input_data, response_model)
 
+        # 応答を分割して処理
+        chat_output, file_output = parse_response_content(response_content)
+
+        # チャット履歴用
+        session['chat_history'].append({
+            'user': input_data,
+            'assistant': chat_output
+        })
+
         # ファイル生成と保存
-        file_data, mime_type, file_format = generate_file(response_content, output_format)
-        temp_filename = f"{uuid.uuid4()}.{file_format}"
+        file_data, mime_type, file_format = generate_file(file_output, output_format)
+        temp_filename = f"{uuid.uuid4()}_{output_format}.{file_format}"
         file_path = os.path.join(SAVE_DIR, temp_filename)
         with open(file_path, 'wb') as f:
             file_data.seek(0)
             f.write(file_data.read())
 
         download_url = url_for('download_file', filename=temp_filename, _external=True)
-        session['chat_history'].append({
-            'user': input_data,
-            'assistant': f"<a href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
-        })
+        session['chat_history'][-1]['assistant'] += f" <a href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
+
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
@@ -176,7 +183,10 @@ def determine_output_format_from_response(response_content):
 def generate_file(content, file_format):
     output = BytesIO()
     if file_format == "xlsx":
-        pd.DataFrame([[content]]).to_excel(output, index=False, engine='xlsxwriter')
+        rows = [row.split("\t") for row in content.split("\n") if row]
+        df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame(rows)
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            df.to_excel(writer, index=False, sheet_name="Sheet1")
     elif file_format == "pdf":
         pdf = FPDF()
         pdf.add_page()
@@ -191,6 +201,12 @@ def generate_file(content, file_format):
         output.write(content.encode("utf-8"))
     output.seek(0)
     return output, "application/octet-stream", file_format
+
+def parse_response_content(response_content):
+    if "ファイル内容:" in response_content:
+        parts = response_content.split("ファイル内容:", 1)
+        return parts[0].strip(), parts[1].strip()
+    return response_content, ""
 
 if __name__ == '__main__':
     app.run(debug=True)
