@@ -29,6 +29,9 @@ search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "https://search-ser
 search_service_key = os.getenv("AZURE_SEARCH_KEY", "your-search-key")
 index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "your-index-name")
 
+vision_subscription_key = os.getenv("VISION_API_KEY", "your-vision-key")
+vision_endpoint = os.getenv("VISION_ENDPOINT", "https://vision.azure.com")
+
 # Azure Search クライアントの設定
 try:
     if not all([search_service_endpoint, search_service_key, index_name]):
@@ -53,6 +56,34 @@ def index():
     session.clear()
     return render_template('index.html', chat_history=[])
 
+@app.route('/ocr', methods=['POST'])
+def ocr_endpoint():
+    image_url = request.json.get("image_url")
+    if not image_url:
+        return jsonify({"error": "No image URL provided"}), 400
+
+    try:
+        text = ocr_image(image_url)
+        return jsonify({"text": text})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+def ocr_image(image_url):
+    ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
+    headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
+    params = {"language": "ja", "detectOrientation": "true"}
+    data = {"url": image_url}
+
+    response = requests.post(ocr_url, headers=headers, params=params, json=data)
+    response.raise_for_status()
+
+    ocr_results = response.json()
+    text_results = []
+    for region in ocr_results.get("regions", []):
+        for line in region.get("lines", []):
+            text_results.append(" ".join(word["text"] for word in line["words"]))
+    return "\n".join(text_results)
+
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
     files = request.files.getlist('files')
@@ -75,6 +106,12 @@ def process_files_and_prompt():
                 columns = df.columns.tolist()
                 rows_text = df.to_string(index=False)
                 file_data_text.append(f"ファイル名: {file.filename}\n列: {columns}\n内容:\n{rows_text}")
+            elif file and file.filename.endswith(('.png', '.jpg', '.jpeg')):
+                # 画像ファイルの場合OCRを実行
+                image_data = file.read()
+                image_url = save_image_to_temp(image_data)  # 画像の一時保存とURL生成
+                ocr_text = ocr_image(image_url)
+                file_data_text.append(f"ファイル名: {file.filename}\nOCR抽出内容:\n{ocr_text}")
 
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
@@ -143,6 +180,13 @@ def download_file(filename):
     else:
         print(f"File not found: {file_path}")
         return "File not found", 404
+
+def save_image_to_temp(image_data):
+    temp_filename = f"{uuid.uuid4()}.png"
+    temp_path = os.path.join('generated_files', temp_filename)
+    with open(temp_path, 'wb') as f:
+        f.write(image_data)
+    return f"http://localhost:5000/generated_files/{temp_filename}"  # ローカル開発用URL
 
 def generate_ai_response(input_data, deployment_name):
     """応答生成を担当するAI"""
