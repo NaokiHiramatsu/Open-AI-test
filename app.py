@@ -165,8 +165,10 @@ def generate_ai_response_and_format(input_data, deployment_name):
     messages = [
         {"role": "system", "content": (
             "あなたは、システム内で直接ファイルを生成し、適切な形式（text, Excel, PDF, Word）を判断し生成します。"
-            "生成するExcelファイルには、1行目に列名、2行目以降にデータ行を含める必要があります。"
-            "Flaskの/downloadエンドポイントを使用してリンクをHTML <a>タグで提供してください。"
+            "生成するExcelファイルには、必ず以下の形式でデータを含めてください："
+            "1行目は列名、2行目以降はデータ行を含めます。空のExcelを生成しないよう注意してください。"
+            "また、出力の前半部分はチャットで表示される文章、後半部分はファイル用のデータとしてください。"
+            "例: チャット出力\n\nファイル内容:\n列1\t列2\nデータ1\tデータ2"
         )},
         {"role": "user", "content": input_data}
     ]
@@ -175,17 +177,29 @@ def generate_ai_response_and_format(input_data, deployment_name):
     output_format = determine_output_format_from_response(response_text)
     return response_text, output_format
 
-def determine_output_format_from_response(response_content):
-    if "excel" in response_content.lower(): return "xlsx"
-    if "pdf" in response_content.lower(): return "pdf"
-    if "word" in response_content.lower(): return "docx"
-    return "txt"
+def parse_response_content(response_content):
+    if "ファイル内容:" in response_content:
+        parts = response_content.split("ファイル内容:", 1)
+        chat_output = parts[0].strip()
+        file_output = parts[1].strip()
+
+        if "\t" not in file_output or "\n" not in file_output:
+            print("AIからのファイルデータがExcel形式ではありません。")
+            return response_content, ""
+
+        return chat_output, file_output
+    return response_content, ""
 
 def generate_file(content, file_format):
     output = BytesIO()
     if file_format == "xlsx":
         rows = [row.split("\t") for row in content.split("\n") if row]
-        df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
+        if len(rows) > 1:
+            df = pd.DataFrame(rows[1:], columns=rows[0])
+        else:
+            print("AIからのExcelデータが不足しています。")
+            df = pd.DataFrame()
+
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
             df.to_excel(writer, index=False, sheet_name="Sheet1")
     elif file_format == "pdf":
