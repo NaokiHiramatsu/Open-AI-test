@@ -97,13 +97,13 @@ def process_files_and_prompt():
 
         # ファイル生成と保存
         file_data, mime_type, filename = generate_file(response_content, output_format)
-        temp_filename = f"{uuid.uuid4()}.{'xlsx' if output_format == 'excel' else filename.split('.')[-1]}"
+        temp_filename = f"{uuid.uuid4()}.{filename.split('.')[-1]}"
         file_path = os.path.join(SAVE_DIR, temp_filename)
 
         with open(file_path, 'wb') as f:
             file_data.seek(0)
             f.write(file_data.read())
-        print(f"File saved at: {file_path}")  # デバッグ用ログ
+        print(f"File saved at: {file_path}, Size: {os.path.getsize(file_path)} bytes")  # デバッグ用ログ
 
         download_url = url_for('download_file', filename=temp_filename, _external=True)
         session['chat_history'].append({
@@ -119,14 +119,14 @@ def process_files_and_prompt():
 @app.route('/download/<filename>')
 def download_file(filename):
     file_path = os.path.join(SAVE_DIR, filename)
-    if os.path.exists(file_path):
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         try:
             return send_file(file_path, as_attachment=True)
         except Exception as e:
             print(f"Error sending file: {e}")
             return "ファイル送信中にエラーが発生しました。", 500
-    print(f"File not found: {file_path}")
-    return "File not found", 404
+    print(f"File not found or empty: {file_path}")
+    return "File not found or file is empty", 404
 
 def save_image_to_temp(image_data):
     temp_filename = f"{uuid.uuid4()}.png"
@@ -134,7 +134,7 @@ def save_image_to_temp(image_data):
     with open(temp_path, 'wb') as f:
         f.write(image_data)
     return temp_path
-
+    
 def ocr_image(image_url):
     ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
     headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
