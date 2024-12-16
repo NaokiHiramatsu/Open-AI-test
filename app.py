@@ -31,6 +31,21 @@ index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "your-index-name")
 vision_subscription_key = os.getenv("VISION_API_KEY", "your-vision-key")
 vision_endpoint = os.getenv("VISION_ENDPOINT", "https://vision.azure.com")
 
+# Azure Search クライアントの設定
+try:
+    if not all([search_service_endpoint, search_service_key, index_name]):
+        raise ValueError("Azure Search の環境変数が正しく設定されていません。")
+
+    search_client = SearchClient(
+        endpoint=search_service_endpoint,
+        index_name=index_name,
+        credential=AzureKeyCredential(search_service_key)
+    )
+    print("Search client initialized successfully.")
+except Exception as e:
+    search_client = None
+    print(f"SearchClient initialization failed: {e}")
+
 # 一時ファイル保存ディレクトリを作成
 SAVE_DIR = "generated_files"
 if not os.path.exists(SAVE_DIR):
@@ -50,7 +65,6 @@ def process_files_and_prompt():
         session['chat_history'] = []
 
     try:
-        # ファイル処理
         file_data_text = []
         for file in files:
             if file and file.filename.endswith('.xlsx'):
@@ -66,9 +80,12 @@ def process_files_and_prompt():
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
         # Azure Search 呼び出し
-        search_results = search_client.search(search_text=prompt, top=3)
-        relevant_docs = [doc.get('chunk', "該当するデータがありません") for doc in search_results]
-        relevant_docs_text = "\n".join(relevant_docs)
+        if search_client:
+            search_results = search_client.search(search_text=prompt, top=3)
+            relevant_docs = [doc.get('chunk', "該当するデータがありません") for doc in search_results]
+            relevant_docs_text = "\n".join(relevant_docs)
+        else:
+            relevant_docs_text = "Azure Search クライアントが初期化されていません。"
 
         # AI応答生成と出力形式判断
         input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
@@ -102,7 +119,6 @@ def download_file(filename):
 
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         try:
-            # MIMEタイプの設定
             mimetype_map = {
                 'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'pdf': 'application/pdf',
