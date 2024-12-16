@@ -165,6 +165,7 @@ def generate_ai_response_and_format(input_data, deployment_name):
     messages = [
         {"role": "system", "content": (
             "あなたは、システム内で直接ファイルを生成し、適切な形式（text, Excel, PDF, Word）を判断し生成します。"
+            "生成するExcelファイルには、1行目に列名、2行目以降にデータ行を含める必要があります。"
             "Flaskの/downloadエンドポイントを使用してリンクをHTML <a>タグで提供してください。"
         )},
         {"role": "user", "content": input_data}
@@ -184,7 +185,7 @@ def generate_file(content, file_format):
     output = BytesIO()
     if file_format == "xlsx":
         rows = [row.split("\t") for row in content.split("\n") if row]
-        df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame(rows)
+        df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
             df.to_excel(writer, index=False, sheet_name="Sheet1")
     elif file_format == "pdf":
