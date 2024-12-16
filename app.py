@@ -29,9 +29,6 @@ search_service_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "https://search-ser
 search_service_key = os.getenv("AZURE_SEARCH_KEY", "your-search-key")
 index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "your-index-name")
 
-vision_subscription_key = os.getenv("VISION_API_KEY", "your-vision-key")
-vision_endpoint = os.getenv("VISION_ENDPOINT", "https://vision.azure.com")
-
 # Azure Search クライアントの設定
 try:
     if not all([search_service_endpoint, search_service_key, index_name]):
@@ -70,22 +67,14 @@ def process_files_and_prompt():
         return jsonify({"error": error_message}), 500
 
     try:
-        # ファイル処理とダウンロードリンク生成
+        # ファイル処理
         file_data_text = []
-        generated_links = []
-
         for file in files:
             if file and file.filename.endswith('.xlsx'):
                 df = pd.read_excel(file, engine='openpyxl')
                 columns = df.columns.tolist()
                 rows_text = df.to_string(index=False)
                 file_data_text.append(f"ファイル名: {file.filename}\n列: {columns}\n内容:\n{rows_text}")
-            elif file and file.filename.endswith(('.png', '.jpg', '.jpeg')):
-                # OCRの実行
-                image_data = file.read()
-                image_url = save_image_to_temp(image_data)
-                ocr_text = ocr_image(image_url)
-                file_data_text.append(f"ファイル名: {file.filename}\nOCR抽出内容:\n{ocr_text}")
 
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
@@ -107,19 +96,40 @@ def process_files_and_prompt():
         # 応答生成
         response_content = generate_ai_response(input_data_with_context, response_model)
 
-        # 出力形式判断とファイル生成
+        # 出力形式判断
         output_decision = determine_file_format(response_content, format_model)
-        file_data, mimetype, filename = generate_file(response_content, output_decision)
-        saved_file = save_file(file_data, output_decision)
-        download_url = url_for('download_file', filename=saved_file, _external=True)
 
-        # セッションにリンクを格納
-        session['chat_history'].append({
-            'user': input_data_with_context,
-            'assistant': f"<a class='download-link' href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
-        })
+        if output_decision not in ["excel", "pdf", "word"]:
+            output_decision = "text"
 
-        return render_template('index.html', chat_history=session['chat_history'])
+        if output_decision == "text":
+            session['chat_history'].append({
+                'user': input_data_with_context,
+                'assistant': response_content
+            })
+            return render_template('index.html', chat_history=session['chat_history'])
+        else:
+            # ファイル生成と保存
+            file_data, mimetype, filename = generate_file(response_content, output_decision)
+            temp_filename = f"{uuid.uuid4()}.{output_decision}"
+            file_path = os.path.join('generated_files', temp_filename)
+
+            # ファイル保存
+            with open(file_path, 'wb') as f:
+                file_data.seek(0)
+                f.write(file_data.read())
+
+            # ダウンロードリンクを生成
+            download_url = url_for('download_file', filename=temp_filename, _external=True)
+            print(f"Generated download URL: {download_url}")  # デバッグ用
+
+            # セッションにリンクを格納
+            session['chat_history'].append({
+                'user': input_data_with_context,
+                'assistant': f"<a class='download-link' href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
+            })
+
+            return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
         print(f"Error in process_files_and_prompt: {e}")
@@ -128,36 +138,14 @@ def process_files_and_prompt():
 @app.route('/download/<filename>')
 def download_file(filename):
     file_path = os.path.join('generated_files', filename)
-    if os.path.isfile(file_path):
+    if os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
     else:
         print(f"File not found: {file_path}")
         return "File not found", 404
 
-def save_image_to_temp(image_data):
-    temp_filename = f"{uuid.uuid4()}.png"
-    temp_path = os.path.join('generated_files', temp_filename)
-    with open(temp_path, 'wb') as f:
-        f.write(image_data)
-    return temp_path
-
-def ocr_image(image_url):
-    ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
-    headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
-    params = {"language": "ja", "detectOrientation": "true"}
-    data = {"url": image_url}
-
-    response = requests.post(ocr_url, headers=headers, params=params, json=data)
-    response.raise_for_status()
-
-    ocr_results = response.json()
-    text_results = []
-    for region in ocr_results.get("regions", []):
-        for line in region.get("lines", []):
-            text_results.append(" ".join(word["text"] for word in line["words"]))
-    return "\n".join(text_results)
-
 def generate_ai_response(input_data, deployment_name):
+    """応答生成を担当するAI"""
     messages = [
         {
             "role": "system",
@@ -168,30 +156,38 @@ def generate_ai_response(input_data, deployment_name):
         },
         {"role": "user", "content": input_data}
     ]
-    response = openai.ChatCompletion.create(
-        engine=deployment_name,
-        messages=messages,
-        max_tokens=2000
-    )
-    return response['choices'][0]['message']['content']
+    try:
+        response = openai.ChatCompletion.create(
+            engine=deployment_name,
+            messages=messages,
+            max_tokens=2000
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        return f"ChatGPT 呼び出し中にエラーが発生しました: {str(e)}"
 
 def determine_file_format(response_content, deployment_name):
-    prompt = f"""
-    以下の応答を基に、適切なファイル形式を選択してください。
-    - text
-    - excel
-    - pdf
-    - word
+    """出力形式の判断を担当するAI"""
+    try:
+        prompt = f"""
+        以下の応答を基に、どの出力形式が適切か選択してください。必ず1つを選んでください。
+        - "text" （テキスト形式で返す場合に選択）
+        - "Excel" （Excelファイルが適切な場合に選択）
+        - "PDF" （PDFファイルが適切な場合に選択）
+        - "Word" （Wordファイルが適切な場合に選択）
 
-    応答内容:
-    {response_content}
-    """
-    response = openai.Completion.create(
-        engine=deployment_name,
-        prompt=prompt,
-        max_tokens=50
-    )
-    return response['choices'][0]['text'].strip().lower()
+        応答内容:
+        {response_content}
+        """
+        response = openai.Completion.create(
+            engine=deployment_name,
+            prompt=prompt,
+            max_tokens=50,
+            temperature=0.3
+        )
+        return response['choices'][0]['text'].strip().lower()
+    except Exception:
+        return "text"
 
 def generate_file(content, file_format):
     output = BytesIO()
@@ -217,15 +213,14 @@ def generate_file(content, file_format):
         output.write(content.encode('utf-8'))
 
     output.seek(0)
-    return output, f"application/{file_format}", f"output.{file_format}"
-
-def save_file(data, extension):
-    filename = f"{uuid.uuid4()}.{extension}"
-    file_path = os.path.join('generated_files', filename)
-    with open(file_path, 'wb') as f:
-        data.seek(0)
-        f.write(data.read())
-    return filename
+    if file_format == "excel":
+        return output, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "output.xlsx"
+    elif file_format == "pdf":
+        return output, "application/pdf", "output.pdf"
+    elif file_format == "word":
+        return output, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "output.docx"
+    else:
+        return output, "text/plain", "output.txt"
 
 if __name__ == '__main__':
     app.run(debug=True)
