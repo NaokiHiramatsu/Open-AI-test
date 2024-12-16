@@ -96,13 +96,19 @@ def process_files_and_prompt():
 
         # ファイル生成と保存（正しい拡張子設定）
         file_data, mime_type, file_format = generate_file(response_content, output_format)
-        temp_filename = f"{uuid.uuid4()}.{file_format}"
-        file_path = os.path.join(SAVE_DIR, temp_filename)
+        if file_format == "excel":
+            temp_filename = f"{uuid.uuid4()}.xlsx"
+        elif file_format == "pdf":
+            temp_filename = f"{uuid.uuid4()}.pdf"
+        elif file_format == "word":
+            temp_filename = f"{uuid.uuid4()}.docx"
+        else:
+            temp_filename = f"{uuid.uuid4()}.txt"
 
+        file_path = os.path.join(SAVE_DIR, temp_filename)
         with open(file_path, 'wb') as f:
             file_data.seek(0)
             f.write(file_data.read())
-        print(f"File saved at: {file_path}, Size: {os.path.getsize(file_path)} bytes")
 
         download_url = url_for('download_file', filename=temp_filename, _external=True)
         session['chat_history'].append({
@@ -123,12 +129,10 @@ def download_file(filename):
         return "Invalid file path", 400
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         try:
-            print(f"Sending file: {file_path}")
             return send_file(file_path, as_attachment=True)
         except Exception as e:
             print(f"Error sending file: {e}")
             return "ファイル送信中にエラーが発生しました。", 500
-    print(f"File not found or empty: {file_path}")
     return "File not found or file is empty", 404
 
 def save_image_to_temp(image_data):
@@ -146,7 +150,7 @@ def ocr_image(image_path):
     response.raise_for_status()
     ocr_results = response.json()
     return "\n".join([" ".join(word['text'] for word in line['words']) for region in ocr_results.get('regions', []) for line in region.get('lines', [])])
-    
+
 def generate_ai_response_and_format(input_data, deployment_name):
     messages = [
         {"role": "system", "content": (
@@ -168,33 +172,22 @@ def determine_output_format_from_response(response_content):
 
 def generate_file(content, file_format):
     output = BytesIO()
-    mime_types = {
-        "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "pdf": "application/pdf",
-        "word": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "text": "text/plain"
-    }
     if file_format == "excel":
-        rows = [row.split("\t") for row in content.split("\n") if row]
-        df = pd.DataFrame(rows[1:], columns=rows[0])
-        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            df.to_excel(writer, index=False, sheet_name="Sheet1")
+        pd.DataFrame([[content]]).to_excel(output, index=False, engine='xlsxwriter')
     elif file_format == "pdf":
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=12)
-        for line in content.split("\n"):
-            pdf.cell(200, 10, txt=line, ln=True)
+        pdf.multi_cell(0, 10, content)
         pdf.output(output)
     elif file_format == "word":
         doc = Document()
-        for line in content.split("\n"):
-            doc.add_paragraph(line)
+        doc.add_paragraph(content)
         doc.save(output)
     else:
         output.write(content.encode("utf-8"))
     output.seek(0)
-    return output, mime_types[file_format], file_format
+    return output, "application/octet-stream", file_format
 
 if __name__ == '__main__':
     app.run(debug=True)
