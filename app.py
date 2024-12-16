@@ -95,9 +95,17 @@ def process_files_and_prompt():
         input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
         response_content, output_format = generate_ai_response_and_format(input_data, response_model)
 
-        # ファイル生成と保存
-        file_data, mime_type, filename = generate_file(response_content, output_format)
-        temp_filename = f"{uuid.uuid4()}.{filename.split('.')[-1]}"
+        # ファイル生成と保存（正しい拡張子を設定）
+        file_data, mime_type, file_format = generate_file(response_content, output_format)
+        if file_format == "excel":
+            temp_filename = f"{uuid.uuid4()}.xlsx"
+        elif file_format == "pdf":
+            temp_filename = f"{uuid.uuid4()}.pdf"
+        elif file_format == "word":
+            temp_filename = f"{uuid.uuid4()}.docx"
+        else:
+            temp_filename = f"{uuid.uuid4()}.txt"
+
         file_path = os.path.join(SAVE_DIR, temp_filename)
 
         with open(file_path, 'wb') as f:
@@ -115,7 +123,7 @@ def process_files_and_prompt():
     except Exception as e:
         print(f"Error during file processing: {e}")
         return jsonify({"error": f"エラーが発生しました: {e}"}), 500
-        
+
 @app.route('/download/<filename>')
 def download_file(filename):
     file_path = os.path.join(SAVE_DIR, filename)
@@ -133,7 +141,7 @@ def save_image_to_temp(image_data):
     temp_path = os.path.join(SAVE_DIR, temp_filename)
     with open(temp_path, 'wb') as f:
         f.write(image_data)
-    return temp_path
+    return temp_filename  # ファイル名のみ返す
     
 def ocr_image(image_url):
     ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
