@@ -165,25 +165,34 @@ def determine_output_format_from_response(response_content):
 
 def generate_file(content, file_format):
     output = BytesIO()
+    mime_types = {
+        "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "pdf": "application/pdf",
+        "word": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text": "text/plain"
+    }
+
     if file_format == "excel":
-        df = pd.read_csv(BytesIO(content.encode()), sep="\t")
-        df.to_excel(output, index=False, engine="xlsxwriter")
+        rows = [row.split("\t") for row in content.strip().split("\n") if row]
+        df = pd.DataFrame(rows[1:], columns=rows[0])
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            df.to_excel(writer, index=False, sheet_name="Sheet1")
     elif file_format == "pdf":
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=12)
-        for line in content.split("\n"):
+        for line in content.strip().split("\n"):
             pdf.cell(200, 10, txt=line, ln=True)
         pdf.output(output)
     elif file_format == "word":
         doc = Document()
-        for line in content.split("\n"):
+        for line in content.strip().split("\n"):
             doc.add_paragraph(line)
         doc.save(output)
     else:
-        output.write(content.encode('utf-8'))
+        output.write(content.encode("utf-8"))
     output.seek(0)
-    return output, "application/octet-stream", f"output.{file_format}"
+    return output, mime_types[file_format], f"output.{file_format}"
 
 if __name__ == '__main__':
     app.run(debug=True)
