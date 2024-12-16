@@ -115,7 +115,7 @@ def process_files_and_prompt():
     except Exception as e:
         print(f"Error during file processing: {e}")
         return jsonify({"error": f"エラーが発生しました: {e}"}), 500
-
+        
 @app.route('/download/<filename>')
 def download_file(filename):
     file_path = os.path.join(SAVE_DIR, filename)
