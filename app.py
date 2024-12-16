@@ -48,41 +48,13 @@ except Exception as e:
     print(f"SearchClient initialization failed: {e}")
 
 # 一時ファイル保存ディレクトリを作成
-if not os.path.exists('static/generated_files'):
-    os.makedirs('static/generated_files')
+if not os.path.exists('generated_files'):
+    os.makedirs('generated_files')
 
 @app.route('/')
 def index():
     session.clear()
     return render_template('index.html', chat_history=[])
-
-@app.route('/ocr', methods=['POST'])
-def ocr_endpoint():
-    image_url = request.json.get("image_url")
-    if not image_url:
-        return jsonify({"error": "No image URL provided"}), 400
-
-    try:
-        text = ocr_image(image_url)
-        return jsonify({"text": text})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-def ocr_image(image_url):
-    ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
-    headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
-    params = {"language": "ja", "detectOrientation": "true"}
-    data = {"url": image_url}
-
-    response = requests.post(ocr_url, headers=headers, params=params, json=data)
-    response.raise_for_status()
-
-    ocr_results = response.json()
-    text_results = []
-    for region in ocr_results.get("regions", []):
-        for line in region.get("lines", []):
-            text_results.append(" ".join(word["text"] for word in line["words"]))
-    return "\n".join(text_results)
 
 @app.route('/process_files_and_prompt', methods=['POST'])
 def process_files_and_prompt():
@@ -149,7 +121,7 @@ def process_files_and_prompt():
             # ファイル生成と保存
             file_data, mimetype, filename = generate_file(response_content, output_decision)
             temp_filename = f"{uuid.uuid4()}.{output_decision}"
-            file_path = os.path.join('static/generated_files', temp_filename)
+            file_path = os.path.join('generated_files', temp_filename)
 
             # ファイル保存
             with open(file_path, 'wb') as f:
@@ -157,9 +129,10 @@ def process_files_and_prompt():
                 f.write(file_data.read())
 
             # ダウンロードリンクを生成
-            download_url = url_for('static', filename=f'generated_files/{temp_filename}', _external=True)
-            print(f"Generated download URL: {download_url}")
+            download_url = url_for('download_file', filename=temp_filename, _external=True)
+            print(f"Generated download URL: {download_url}")  # デバッグ用
 
+            # セッションにリンクを格納
             session['chat_history'].append({
                 'user': input_data_with_context,
                 'assistant': f"<a class='download-link' href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
@@ -173,7 +146,7 @@ def process_files_and_prompt():
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    file_path = os.path.join('static/generated_files', filename)
+    file_path = os.path.join('generated_files', filename)
     if os.path.isfile(file_path):
         return send_file(file_path, as_attachment=True)
     else:
@@ -182,25 +155,47 @@ def download_file(filename):
 
 def save_image_to_temp(image_data):
     temp_filename = f"{uuid.uuid4()}.png"
-    temp_path = os.path.join('static/generated_files', temp_filename)
+    temp_path = os.path.join('generated_files', temp_filename)
     with open(temp_path, 'wb') as f:
         f.write(image_data)
-    return f"http://localhost:5000/static/generated_files/{temp_filename}"
+    return temp_path
+
+def ocr_image(image_url):
+    ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
+    headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
+    params = {"language": "ja", "detectOrientation": "true"}
+    data = {"url": image_url}
+
+    response = requests.post(ocr_url, headers=headers, params=params, json=data)
+    response.raise_for_status()
+
+    ocr_results = response.json()
+    text_results = []
+    for region in ocr_results.get("regions", []):
+        for line in region.get("lines", []):
+            text_results.append(" ".join(word["text"] for word in line["words"]))
+    return "\n".join(text_results)
 
 def generate_ai_response(input_data, deployment_name):
     messages = [
         {
             "role": "system",
-            "content": "あなたは有能なアシスタントです。"
+            "content": (
+                "あなたは、システム内で直接ファイルを生成し、正しいダウンロードリンクをHTML <a>タグで提供します。"
+                "Flaskの/downloadエンドポイントを使用してリンクを生成してください。"
+            )
         },
         {"role": "user", "content": input_data}
     ]
-    response = openai.ChatCompletion.create(
-        engine=deployment_name,
-        messages=messages,
-        max_tokens=2000
-    )
-    return response['choices'][0]['message']['content']
+    try:
+        response = openai.ChatCompletion.create(
+            engine=deployment_name,
+            messages=messages,
+            max_tokens=2000
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        return f"ChatGPT 呼び出し中にエラーが発生しました: {str(e)}"
 
 def determine_file_format(response_content, deployment_name):
     prompt = f"""
@@ -213,12 +208,15 @@ def determine_file_format(response_content, deployment_name):
     応答内容:
     {response_content}
     """
-    response = openai.Completion.create(
-        engine=deployment_name,
-        prompt=prompt,
-        max_tokens=50
-    )
-    return response['choices'][0]['text'].strip().lower()
+    try:
+        response = openai.Completion.create(
+            engine=deployment_name,
+            prompt=prompt,
+            max_tokens=50
+        )
+        return response['choices'][0]['text'].strip().lower()
+    except Exception:
+        return "text"
 
 def generate_file(content, file_format):
     output = BytesIO()
