@@ -80,9 +80,8 @@ def process_files_and_prompt():
                 file_data_text.append(f"ファイル名: {file.filename}\n列: {columns}\n内容:\n{rows_text}")
             elif file and file.filename.endswith(('.png', '.jpg', '.jpeg')):
                 image_data = file.read()
-                image_url = save_image_to_temp(image_data)
-                ocr_text = ocr_image(image_url)
-                file_data_text.append(f"ファイル名: {file.filename}\nOCR抽出内容:\n{ocr_text}")
+                image_filename = save_image_to_temp(image_data)
+                file_data_text.append(f"ファイル名: {file.filename}\nOCR抽出内容:\n{ocr_image(image_filename)}")
 
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
@@ -95,23 +94,15 @@ def process_files_and_prompt():
         input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
         response_content, output_format = generate_ai_response_and_format(input_data, response_model)
 
-        # ファイル生成と保存（正しい拡張子を設定）
+        # ファイル生成と保存（正しい拡張子設定）
         file_data, mime_type, file_format = generate_file(response_content, output_format)
-        if file_format == "excel":
-            temp_filename = f"{uuid.uuid4()}.xlsx"
-        elif file_format == "pdf":
-            temp_filename = f"{uuid.uuid4()}.pdf"
-        elif file_format == "word":
-            temp_filename = f"{uuid.uuid4()}.docx"
-        else:
-            temp_filename = f"{uuid.uuid4()}.txt"
-
+        temp_filename = f"{uuid.uuid4()}.{file_format}"
         file_path = os.path.join(SAVE_DIR, temp_filename)
 
         with open(file_path, 'wb') as f:
             file_data.seek(0)
             f.write(file_data.read())
-        print(f"File saved at: {file_path}, Size: {os.path.getsize(file_path)} bytes")  # デバッグ用ログ
+        print(f"File saved at: {file_path}, Size: {os.path.getsize(file_path)} bytes")
 
         download_url = url_for('download_file', filename=temp_filename, _external=True)
         session['chat_history'].append({
@@ -126,9 +117,13 @@ def process_files_and_prompt():
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    file_path = os.path.join(SAVE_DIR, filename)
+    file_path = os.path.abspath(os.path.join(SAVE_DIR, filename))
+    if not file_path.startswith(os.path.abspath(SAVE_DIR)):
+        print(f"Invalid file path: {file_path}")
+        return "Invalid file path", 400
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         try:
+            print(f"Sending file: {file_path}")
             return send_file(file_path, as_attachment=True)
         except Exception as e:
             print(f"Error sending file: {e}")
@@ -141,16 +136,17 @@ def save_image_to_temp(image_data):
     temp_path = os.path.join(SAVE_DIR, temp_filename)
     with open(temp_path, 'wb') as f:
         f.write(image_data)
-    return temp_filename  # ファイル名のみ返す
-    
-def ocr_image(image_url):
+    return temp_path
+
+def ocr_image(image_path):
     ocr_url = f"{vision_endpoint}/vision/v3.2/ocr"
     headers = {"Ocp-Apim-Subscription-Key": vision_subscription_key}
-    response = requests.post(ocr_url, headers=headers, json={"url": image_url})
+    with open(image_path, "rb") as img:
+        response = requests.post(ocr_url, headers=headers, files={"file": img})
     response.raise_for_status()
     ocr_results = response.json()
     return "\n".join([" ".join(word['text'] for word in line['words']) for region in ocr_results.get('regions', []) for line in region.get('lines', [])])
-
+    
 def generate_ai_response_and_format(input_data, deployment_name):
     messages = [
         {"role": "system", "content": (
