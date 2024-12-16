@@ -97,12 +97,13 @@ def process_files_and_prompt():
 
         # ファイル生成と保存
         file_data, mime_type, filename = generate_file(response_content, output_format)
-        temp_filename = f"{uuid.uuid4()}.{'xlsx' if output_format == 'excel' else filename}"  # Excelの拡張子をxlsxに修正
+        temp_filename = f"{uuid.uuid4()}.{'xlsx' if output_format == 'excel' else filename.split('.')[-1]}"
         file_path = os.path.join(SAVE_DIR, temp_filename)
 
         with open(file_path, 'wb') as f:
             file_data.seek(0)
             f.write(file_data.read())
+        print(f"File saved at: {file_path}")  # デバッグ用ログ
 
         download_url = url_for('download_file', filename=temp_filename, _external=True)
         session['chat_history'].append({
@@ -112,14 +113,18 @@ def process_files_and_prompt():
         return render_template('index.html', chat_history=session['chat_history'])
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error during file processing: {e}")
         return jsonify({"error": f"エラーが発生しました: {e}"}), 500
 
 @app.route('/download/<filename>')
 def download_file(filename):
     file_path = os.path.join(SAVE_DIR, filename)
     if os.path.exists(file_path):
-        return send_file(file_path, as_attachment=True)
+        try:
+            return send_file(file_path, as_attachment=True)
+        except Exception as e:
+            print(f"Error sending file: {e}")
+            return "ファイル送信中にエラーが発生しました。", 500
     print(f"File not found: {file_path}")
     return "File not found", 404
 
