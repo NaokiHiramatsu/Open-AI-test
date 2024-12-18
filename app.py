@@ -66,9 +66,12 @@ def process_files_and_prompt():
 
     try:
         file_data_text = []
+        excel_dataframes = []  # Excelデータを格納するリスト
+
         for file in files:
             if file and file.filename.endswith('.xlsx'):
                 df = pd.read_excel(file, engine='openpyxl')
+                excel_dataframes.append(df)
                 columns = df.columns.tolist()
                 rows_text = df.to_string(index=False)
                 file_data_text.append(f"ファイル名: {file.filename}\n列: {columns}\n内容:\n{rows_text}")
@@ -82,8 +85,12 @@ def process_files_and_prompt():
         # Azure Search 呼び出し
         if search_client:
             search_results = search_client.search(search_text=prompt, top=3)
-            relevant_docs = [doc.get('chunk', "該当するデータがありません") for doc in search_results]
-            relevant_docs_text = "\n".join(relevant_docs)
+            relevant_docs = [{"chunk_headers": ["Header1", "Header2"], "chunk_rows": [["Row1", "Row2"]]}]  # サンプル構造
+            relevant_docs_text = "\n".join([str(doc) for doc in relevant_docs])
+            for doc in relevant_docs:
+                if "chunk_headers" in doc and "chunk_rows" in doc:
+                    df = pd.DataFrame(data=doc["chunk_rows"], columns=doc["chunk_headers"])
+                    excel_dataframes.append(df)
         else:
             relevant_docs_text = "Azure Search クライアントが初期化されていません。"
 
@@ -93,6 +100,11 @@ def process_files_and_prompt():
 
         # 応答を分割して処理
         chat_output, file_output = parse_response_content(response_content)
+        
+        # Excelへの統合処理
+        if excel_dataframes:
+            combined_df = pd.concat(excel_dataframes, ignore_index=True)
+            file_output = combined_df.to_csv(index=False, sep="\t")  # Excel出力のために表形式に変換
 
         # チャット履歴用
         session['chat_history'].append({
