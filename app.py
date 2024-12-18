@@ -207,12 +207,12 @@ def generate_file(content, file_format):
     if file_format == "xlsx":
         if isinstance(content, BytesIO):  # BytesIOオブジェクトの場合
             content.seek(0)  # ポインタを先頭に戻す
-            df = pd.read_excel(content, engine="openpyxl")  # Excelデータを読み込む
+            return content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file_format
         else:  # 通常の文字列コンテンツの場合
             rows = [row.split("\t") for row in content.split("\n") if row]
             df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
-        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            df.to_excel(writer, index=False, sheet_name="Sheet1")
+            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                df.to_excel(writer, index=False, sheet_name="Sheet1")
     elif file_format == "pdf":
         pdf = FPDF()
         pdf.add_page()
@@ -227,7 +227,6 @@ def generate_file(content, file_format):
         output.write(content.encode("utf-8"))
     output.seek(0)
     return output, "application/octet-stream", file_format
-
 
 def parse_response_content(response_content):
     if "ファイル内容:" in response_content:
