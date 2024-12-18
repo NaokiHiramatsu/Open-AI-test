@@ -203,16 +203,16 @@ def determine_output_format_from_response(response_content):
     return "txt"
 
 def generate_file(content, file_format):
-        output = BytesIO()
-if file_format == "xlsx":
-    if isinstance(content, BytesIO):  # BytesIOオブジェクトの場合
-        content.seek(0)  # ポインタを先頭に戻す
-        df = pd.read_excel(content, engine="openpyxl")  # Excelデータを読み込む
-    else:  # 通常の文字列コンテンツの場合
-        rows = [row.split("\t") for row in content.split("\n") if row]
-        df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Sheet1")
+    output = BytesIO()
+    if file_format == "xlsx":
+        if isinstance(content, BytesIO):  # BytesIOオブジェクトの場合
+            content.seek(0)  # ポインタを先頭に戻す
+            df = pd.read_excel(content, engine="openpyxl")  # Excelデータを読み込む
+        else:  # 通常の文字列コンテンツの場合
+            rows = [row.split("\t") for row in content.split("\n") if row]
+            df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            df.to_excel(writer, index=False, sheet_name="Sheet1")
     elif file_format == "pdf":
         pdf = FPDF()
         pdf.add_page()
@@ -228,11 +228,13 @@ if file_format == "xlsx":
     output.seek(0)
     return output, "application/octet-stream", file_format
 
+
 def parse_response_content(response_content):
     if "ファイル内容:" in response_content:
         parts = response_content.split("ファイル内容:", 1)
         return parts[0].strip(), parts[1].strip()
     return response_content, ""
+
 
 if __name__ == '__main__':
     app.run(debug=True)
