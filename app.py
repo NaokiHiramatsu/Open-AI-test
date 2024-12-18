@@ -82,15 +82,18 @@ def process_files_and_prompt():
 
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
-        # Azure Search 呼び出し
+          # Azure Search 呼び出し
         if search_client:
             search_results = search_client.search(search_text=prompt, top=3)
-            relevant_docs = [{"chunk_headers": ["Header1", "Header2"], "chunk_rows": [["Row1", "Row2"]]}]  # サンプル構造
-            relevant_docs_text = "\n".join([str(doc) for doc in relevant_docs])
-            for doc in relevant_docs:
-                if "chunk_headers" in doc and "chunk_rows" in doc:
-                    df = pd.DataFrame(data=doc["chunk_rows"], columns=doc["chunk_headers"])
+            relevant_docs = []
+            for result in search_results:
+                headers = result.get("chunk_headers", [])
+                rows = result.get("chunk_rows", [])
+                if headers and rows:
+                    df = pd.DataFrame(data=rows, columns=headers)
                     excel_dataframes.append(df)
+                    relevant_docs.append(f"データ取得: {headers} {rows}")
+            relevant_docs_text = "\n".join(relevant_docs)
         else:
             relevant_docs_text = "Azure Search クライアントが初期化されていません。"
 
@@ -104,7 +107,8 @@ def process_files_and_prompt():
         # Excelへの統合処理
         if excel_dataframes:
             combined_df = pd.concat(excel_dataframes, ignore_index=True)
-            file_output = combined_df.to_csv(index=False, sep="\t")  # Excel出力のために表形式に変換
+            output_format = "xlsx"
+            file_output = combined_df.to_excel(index=False, engine='openpyxl')
 
         # チャット履歴用
         session['chat_history'].append({
