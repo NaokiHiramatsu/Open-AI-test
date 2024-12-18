@@ -108,7 +108,10 @@ def process_files_and_prompt():
         if excel_dataframes:
             combined_df = pd.concat(excel_dataframes, ignore_index=True)
             output_format = "xlsx"
-            file_output = combined_df.to_excel(index=False, engine='openpyxl')
+            excel_buffer = BytesIO()  # BytesIOオブジェクトを作成
+            combined_df.to_excel(excel_buffer, index=False, engine='openpyxl')  # Excelに書き込む
+            excel_buffer.seek(0)  # ファイルの先頭にポインタを戻す
+            file_output = excel_buffer  # ファイル出力用に渡す
 
         # チャット履歴用
         session['chat_history'].append({
