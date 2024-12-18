@@ -166,6 +166,8 @@ def generate_ai_response_and_format(input_data, deployment_name):
         {"role": "system", "content": (
             "あなたは、システム内で直接ファイルを生成し、適切な形式（text, Excel, PDF, Word）を判断し生成します。"
             "生成するExcelファイルには、1行目に列名、2行目以降にデータ行を含める必要があります。"
+            "ファイルで出力すべき内容以外の文章はテキスト形式で返してください。"
+            "必ずファイル形式と内容を判断し、必要に応じて表形式を正しく出力してください。"
             "Flaskの/downloadエンドポイントを使用してリンクをHTML <a>タグで提供してください。"
         )},
         {"role": "user", "content": input_data}
