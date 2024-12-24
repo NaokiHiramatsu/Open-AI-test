@@ -10,6 +10,7 @@ from flask_session import Session
 import requests
 from fpdf import FPDF
 from docx import Document
+from urllib.parse import quote
 
 # Flaskアプリの設定
 app = Flask(__name__)
@@ -50,6 +51,16 @@ except Exception as e:
 SAVE_DIR = "generated_files"
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
+
+@app.after_request
+def add_security_headers(response):
+    response.headers['Content-Security-Policy'] = "default-src 'self'"
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    return response
 
 @app.route('/')
 def index():
@@ -165,7 +176,6 @@ def download_file(filename):
             ext = filename.split('.')[-1]
             mimetype = mimetype_map.get(ext, 'application/octet-stream')
 
-            from urllib.parse import quote
             encoded_filename = quote(filename)
 
             print(f"Serving file: {file_path} with MIME type: {mimetype}")
