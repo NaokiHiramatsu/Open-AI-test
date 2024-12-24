@@ -103,24 +103,23 @@ def process_files_and_prompt():
                     search_text=prompt,
                     query_type="semantic",
                     semantic_configuration_name="vector-1730110777868-semantic-configuration",
-                    top=3
+                    top=3,
+                    select=["chunk", "title", "chunk_id", "@search.score"]  # 必要なフィールドのみ選択
                 )
                 relevant_docs = []
                 for result in search_results:
-                    print(f"Search result: {result}")  # デバッグ用に検索結果をログ出力
-                    headers = result.get("chunk_headers", [])
-                    rows = result.get("chunk_rows", [])
-                    if headers and rows:
-                        df = pd.DataFrame(data=rows, columns=headers)
-                        excel_dataframes.append(df)
-                        relevant_docs.append(f"データ取得: {headers} {rows}")
-                relevant_docs_text = "\n".join(relevant_docs)
+                    relevant_docs.append({
+                        "id": result.get("chunk_id"),
+                        "title": result.get("title"),
+                        "preview": result.get("chunk", "")[:500],  # 最大500文字までプレビュー
+                        "score": result.get("@search.score")
+                    })
             except Exception as e:
-                relevant_docs_text = f"Azure Search クエリ実行中にエラーが発生しました: {e}"
-                print(relevant_docs_text)
+                relevant_docs = [{"error": str(e)}]
         else:
-            relevant_docs_text = "Azure Search クライアントが初期化されていないか、接続エラーが発生しています。"
-            print(relevant_docs_text)
+            relevant_docs = [{"error": "Azure Search クライアントが初期化されていないか、接続エラーが発生しています。"}]
+
+        relevant_docs_text = "\n".join([str(doc) for doc in relevant_docs])
 
         # AI応答生成と出力形式判断
         input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
@@ -252,7 +251,7 @@ def generate_file(content, file_format):
         output.write(content.encode("utf-8"))
     output.seek(0)
     return output, "application/octet-stream", file_format
-
+    
 def parse_response_content(response_content):
     if "ファイル内容:" in response_content:
         parts = response_content.split("ファイル内容:", 1)
