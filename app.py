@@ -99,7 +99,12 @@ def process_files_and_prompt():
         # Azure Search 呼び出し
         if search_client and check_search_connection():
             try:
-                search_results = search_client.search(search_text=prompt, top=3)
+                search_results = search_client.search(
+                    search_text=prompt,
+                    query_type="semantic",
+                    semantic_configuration_name="vector-1730110777868-semantic-configuration",
+                    top=3
+                )
                 relevant_docs = []
                 for result in search_results:
                     print(f"Search result: {result}")  # デバッグ用に検索結果をログ出力
