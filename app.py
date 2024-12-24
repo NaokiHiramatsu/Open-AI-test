@@ -10,7 +10,6 @@ from flask_session import Session
 import requests
 from fpdf import FPDF
 from docx import Document
-from urllib.parse import quote
 
 # Flaskアプリの設定
 app = Flask(__name__)
@@ -51,16 +50,6 @@ except Exception as e:
 SAVE_DIR = "generated_files"
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
-
-@app.after_request
-def add_security_headers(response):
-    response.headers['Content-Security-Policy'] = "default-src 'self'"
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
-    response.headers['Referrer-Policy'] = 'no-referrer'
-    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-    response.headers['Pragma'] = 'no-cache'
-    return response
 
 @app.route('/')
 def index():
@@ -138,11 +127,6 @@ def process_files_and_prompt():
             file_data.seek(0)
             f.write(file_data.read())
 
-        # ファイル生成後のチェック
-        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-            print(f"Error: File {file_path} is not saved or is empty.")
-            return jsonify({"error": "ファイル生成に失敗しました。"}), 500
-
         download_url = url_for('download_file', filename=temp_filename, _external=True)
         session['chat_history'][-1]['assistant'] += f" <a href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
 
@@ -159,11 +143,7 @@ def download_file(filename):
         print(f"Invalid file path: {file_path}")
         return "Invalid file path", 400
 
-    if os.path.exists(file_path):
-        if os.path.getsize(file_path) == 0:  # ファイルが空の場合
-            print(f"Error: File {file_path} is empty.")
-            return "The requested file is empty.", 404
-
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
         try:
             mimetype_map = {
                 'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -176,22 +156,10 @@ def download_file(filename):
             ext = filename.split('.')[-1]
             mimetype = mimetype_map.get(ext, 'application/octet-stream')
 
-            encoded_filename = quote(filename)
-
-            print(f"Serving file: {file_path} with MIME type: {mimetype}")
-            print(f"File size: {os.path.getsize(file_path)} bytes")
-
-            return send_file(
-                file_path,
-                mimetype=mimetype,
-                as_attachment=True,
-                download_name=encoded_filename,
-                cache_timeout=0  # キャッシュを無効化
-            )
+            return send_file(file_path, mimetype=mimetype, as_attachment=True, download_name=filename)
         except Exception as e:
-            error_message = f"File download failed due to: {str(e)}"
-            print(error_message)
-            return error_message, 500
+            print(f"Error sending file: {e}")
+            return "ファイル送信中にエラーが発生しました。", 500
 
     print(f"File not found or empty: {file_path}")
     return "File not found or file is empty", 404
@@ -201,7 +169,6 @@ def save_image_to_temp(image_data):
     temp_path = os.path.join(SAVE_DIR, temp_filename)
     with open(temp_path, 'wb') as f:
         f.write(image_data)
-    print(f"Image saved at: {temp_path}")
     return temp_path
 
 def ocr_image(image_path):
@@ -266,6 +233,7 @@ def parse_response_content(response_content):
         parts = response_content.split("ファイル内容:", 1)
         return parts[0].strip(), parts[1].strip()
     return response_content, ""
+
 
 if __name__ == '__main__':
     app.run(debug=True)
