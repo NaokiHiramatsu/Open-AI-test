@@ -127,6 +127,11 @@ def process_files_and_prompt():
             file_data.seek(0)
             f.write(file_data.read())
 
+        # ファイル生成後のチェック
+        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+            print(f"Error: File {file_path} is not saved or is empty.")
+            return jsonify({"error": "ファイル生成に失敗しました。"}), 500
+
         download_url = url_for('download_file', filename=temp_filename, _external=True)
         session['chat_history'][-1]['assistant'] += f" <a href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
 
@@ -161,6 +166,7 @@ def download_file(filename):
             mimetype = mimetype_map.get(ext, 'application/octet-stream')
 
             print(f"Serving file: {file_path} with MIME type: {mimetype}")
+            print(f"File size: {os.path.getsize(file_path)} bytes")
 
             return send_file(
                 file_path,
@@ -182,6 +188,7 @@ def save_image_to_temp(image_data):
     temp_path = os.path.join(SAVE_DIR, temp_filename)
     with open(temp_path, 'wb') as f:
         f.write(image_data)
+    print(f"Image saved at: {temp_path}")
     return temp_path
 
 def ocr_image(image_path):
@@ -246,7 +253,6 @@ def parse_response_content(response_content):
         parts = response_content.split("ファイル内容:", 1)
         return parts[0].strip(), parts[1].strip()
     return response_content, ""
-
 
 if __name__ == '__main__':
     app.run(debug=True)
