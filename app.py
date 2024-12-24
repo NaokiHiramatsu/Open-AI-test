@@ -102,6 +102,7 @@ def process_files_and_prompt():
                 search_results = search_client.search(search_text=prompt, top=3)
                 relevant_docs = []
                 for result in search_results:
+                    print(f"Search result: {result}")  # デバッグ用に検索結果をログ出力
                     headers = result.get("chunk_headers", [])
                     rows = result.get("chunk_rows", [])
                     if headers and rows:
@@ -122,7 +123,7 @@ def process_files_and_prompt():
 
         # 応答を分割して処理
         chat_output, file_output = parse_response_content(response_content)
-        
+
         # Excelへの統合処理
         if excel_dataframes:
             combined_df = pd.concat(excel_dataframes, ignore_index=True)
@@ -252,7 +253,6 @@ def parse_response_content(response_content):
         parts = response_content.split("ファイル内容:", 1)
         return parts[0].strip(), parts[1].strip()
     return response_content, ""
-
 
 if __name__ == '__main__':
     app.run(debug=True)
