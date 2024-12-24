@@ -46,6 +46,20 @@ except Exception as e:
     search_client = None
     print(f"SearchClient initialization failed: {e}")
 
+# Azure Search接続確認関数
+def check_search_connection():
+    try:
+        test_response = requests.get(
+            f"{search_service_endpoint}/indexes?api-version=2021-04-30-Preview",
+            headers={"api-key": search_service_key}
+        )
+        test_response.raise_for_status()
+        print("Azure Search connection is successful.")
+    except Exception as e:
+        print(f"Failed to connect to Azure Search: {e}")
+        return False
+    return True
+
 # 一時ファイル保存ディレクトリを作成
 SAVE_DIR = "generated_files"
 if not os.path.exists(SAVE_DIR):
@@ -83,19 +97,24 @@ def process_files_and_prompt():
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
         # Azure Search 呼び出し
-        if search_client:
-            search_results = search_client.search(search_text=prompt, top=3)
-            relevant_docs = []
-            for result in search_results:
-                headers = result.get("chunk_headers", [])
-                rows = result.get("chunk_rows", [])
-                if headers and rows:
-                    df = pd.DataFrame(data=rows, columns=headers)
-                    excel_dataframes.append(df)
-                    relevant_docs.append(f"データ取得: {headers} {rows}")
-            relevant_docs_text = "\n".join(relevant_docs)
+        if search_client and check_search_connection():
+            try:
+                search_results = search_client.search(search_text=prompt, top=3)
+                relevant_docs = []
+                for result in search_results:
+                    headers = result.get("chunk_headers", [])
+                    rows = result.get("chunk_rows", [])
+                    if headers and rows:
+                        df = pd.DataFrame(data=rows, columns=headers)
+                        excel_dataframes.append(df)
+                        relevant_docs.append(f"データ取得: {headers} {rows}")
+                relevant_docs_text = "\n".join(relevant_docs)
+            except Exception as e:
+                relevant_docs_text = f"Azure Search クエリ実行中にエラーが発生しました: {e}"
+                print(relevant_docs_text)
         else:
-            relevant_docs_text = "Azure Search クライアントが初期化されていません。"
+            relevant_docs_text = "Azure Search クライアントが初期化されていないか、接続エラーが発生しています。"
+            print(relevant_docs_text)
 
         # AI応答生成と出力形式判断
         input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
