@@ -165,6 +165,9 @@ def download_file(filename):
             ext = filename.split('.')[-1]
             mimetype = mimetype_map.get(ext, 'application/octet-stream')
 
+            from urllib.parse import quote
+            encoded_filename = quote(filename)
+
             print(f"Serving file: {file_path} with MIME type: {mimetype}")
             print(f"File size: {os.path.getsize(file_path)} bytes")
 
@@ -172,7 +175,7 @@ def download_file(filename):
                 file_path,
                 mimetype=mimetype,
                 as_attachment=True,
-                download_name=filename,
+                download_name=encoded_filename,
                 cache_timeout=0  # キャッシュを無効化
             )
         except Exception as e:
