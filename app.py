@@ -143,7 +143,11 @@ def download_file(filename):
         print(f"Invalid file path: {file_path}")
         return "Invalid file path", 400
 
-    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+    if os.path.exists(file_path):
+        if os.path.getsize(file_path) == 0:  # ファイルが空の場合
+            print(f"Error: File {file_path} is empty.")
+            return "The requested file is empty.", 404
+
         try:
             mimetype_map = {
                 'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -156,10 +160,19 @@ def download_file(filename):
             ext = filename.split('.')[-1]
             mimetype = mimetype_map.get(ext, 'application/octet-stream')
 
-            return send_file(file_path, mimetype=mimetype, as_attachment=True, download_name=filename)
+            print(f"Serving file: {file_path} with MIME type: {mimetype}")
+
+            return send_file(
+                file_path,
+                mimetype=mimetype,
+                as_attachment=True,
+                download_name=filename,
+                cache_timeout=0  # キャッシュを無効化
+            )
         except Exception as e:
-            print(f"Error sending file: {e}")
-            return "ファイル送信中にエラーが発生しました。", 500
+            error_message = f"File download failed due to: {str(e)}"
+            print(error_message)
+            return error_message, 500
 
     print(f"File not found or empty: {file_path}")
     return "File not found or file is empty", 404
