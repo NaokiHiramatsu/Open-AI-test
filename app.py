@@ -10,6 +10,8 @@ from flask_session import Session
 import requests
 from fpdf import FPDF
 from docx import Document
+import time
+from PyPDF2 import PdfReader
 
 # Flaskアプリの設定
 app = Flask(__name__)
@@ -187,7 +189,6 @@ def ocr_image(image_path):
     return "\n".join([" ".join(word['text'] for word in line['words']) for region in ocr_results.get('regions', []) for line in region.get('lines', [])])
 
 def extract_text_from_pdf(file):
-    from PyPDF2 import PdfReader
     reader = PdfReader(file)
     return "\n".join(page.extract_text() for page in reader.pages)
 
@@ -224,10 +225,21 @@ def generate_ai_response_and_format(input_data, deployment_name):
         )},
         {"role": "user", "content": input_data}
     ]
-    response = openai.ChatCompletion.create(engine=deployment_name, messages=messages, max_tokens=2000)
-    response_text = response['choices'][0]['message']['content']
-    output_format = determine_output_format_from_response(response_text)
-    return response_text, output_format
+    retry_count = 0
+    while retry_count < 3:  # 最大3回リトライ
+        try:
+            response = openai.ChatCompletion.create(
+                engine=deployment_name, messages=messages, max_tokens=2000
+            )
+            response_text = response['choices'][0]['message']['content']
+            output_format = determine_output_format_from_response(response_text)
+            return response_text, output_format
+        except openai.error.RateLimitError:
+            retry_count += 1
+            wait_time = 10 + (retry_count * 5)  # 待機時間を段階的に増やす
+            print(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+    raise Exception("Rate limit exceeded. Please try again later.")
 
 def determine_output_format_from_response(response_content):
     if "excel" in response_content.lower(): return "xlsx"
