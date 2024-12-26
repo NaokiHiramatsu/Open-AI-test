@@ -116,7 +116,7 @@ def process_files_and_prompt():
                     try:
                         # 行ごとに分割しデータフレームに変換
                         rows = [line.split(",") for line in chunk_content.split("\n") if line]
-                        df = pd.DataFrame(rows)
+                        df = pd.DataFrame(rows[1:], columns=rows[0]) if rows else pd.DataFrame()
 
                         # データフレームをExcelバッファに保存
                         excel_buffer = BytesIO()
@@ -144,9 +144,6 @@ def process_files_and_prompt():
         input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
         response_content, output_format = generate_ai_response_and_format(input_data, response_model)
 
-        # 応答を分割して処理
-        chat_output, file_output = parse_response_content(response_content)
-
         # 検索結果から生成されたExcelデータの統合
         if excel_buffers:
             combined_excel = BytesIO()
@@ -162,7 +159,7 @@ def process_files_and_prompt():
         # チャット履歴用
         session['chat_history'].append({
             'user': input_data,
-            'assistant': chat_output
+            'assistant': response_content
         })
 
         # ファイル生成と保存
