@@ -81,8 +81,8 @@ def process_files_and_prompt():
     try:
         file_data_text = []
         excel_dataframes = []  # Excelデータを格納するリスト
-        file_output = None  # 初期化
-        output_format = "txt"  # 初期化
+        file_output = BytesIO()  # デフォルト初期化
+        output_format = "txt"  # デフォルト初期化
 
         for file in files:
             if file and file.filename.endswith('.xlsx'):
@@ -99,28 +99,30 @@ def process_files_and_prompt():
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
         # Azure Search 呼び出し
+        relevant_docs = []
+        excel_buffers = []
+
         if search_client and check_search_connection():
             try:
                 search_results = search_client.search(
                     search_text=prompt,
                     query_type="semantic",
                     semantic_configuration_name="vector-1730110777868-semantic-configuration",
-                    top=None,  # 制限なしですべての結果を取得
+                    top=None,
                     select=["chunk", "title", "chunk_id", "@search.score"]
                 )
-                relevant_docs = []
-                excel_buffers = []
 
                 for result in search_results:
                     chunk_content = result.get("chunk", "")
                     title = result.get("title", "")
 
                     try:
-                        # 行ごとに分割しデータフレームに変換
                         rows = [line.split(",") for line in chunk_content.split("\n") if line]
-                        df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
+                        if rows and len(rows) > 1:
+                            df = pd.DataFrame(rows[1:], columns=rows[0])
+                        else:
+                            df = pd.DataFrame()
 
-                        # データフレームをExcelバッファに保存
                         excel_buffer = BytesIO()
                         with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
                             df.to_excel(writer, index=False, sheet_name=title[:31])
@@ -140,9 +142,6 @@ def process_files_and_prompt():
         else:
             relevant_docs = [{"error": "Azure Search クライアントが初期化されていないか、接続エラーが発生しています。"}]
 
-        relevant_docs_text = "\n".join([str(doc) for doc in relevant_docs])
-
-        # 検索結果から生成されたExcelデータの統合
         if excel_buffers:
             combined_excel = BytesIO()
             with pd.ExcelWriter(combined_excel, engine='openpyxl') as writer:
@@ -154,23 +153,16 @@ def process_files_and_prompt():
             file_output = combined_excel
             output_format = "xlsx"
 
-        # AI応答生成と出力形式判断
-        input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
+        # チャット履歴用
+        input_data = f"アップロードされたファイル内容:\n{file_contents}\nプロンプト:\n{prompt}"
         response_content, _ = generate_ai_response_and_format(input_data, response_model)
 
-        # チャット履歴用
         session['chat_history'].append({
             'user': input_data,
             'assistant': response_content
         })
 
         # ファイル生成と保存
-        if file_output is None:
-            file_output = BytesIO()
-            file_output.write(response_content.encode('utf-8'))
-            file_output.seek(0)
-            output_format = "txt"
-
         file_data, mime_type, file_format = generate_file(file_output, output_format)
         temp_filename = f"{uuid.uuid4()}.{file_format}"
         file_path = os.path.join(SAVE_DIR, temp_filename)
