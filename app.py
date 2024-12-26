@@ -80,9 +80,7 @@ def process_files_and_prompt():
 
     try:
         file_data_text = []
-        excel_dataframes = []
-        file_output = None
-        output_format = "txt"
+        excel_dataframes = []  # Excelデータを格納するリスト
 
         for file in files:
             if file and file.filename.endswith('.xlsx'):
@@ -98,78 +96,60 @@ def process_files_and_prompt():
 
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
-        relevant_docs = []
-        excel_buffers = []
-
+        # Azure Search 呼び出し
         if search_client and check_search_connection():
             try:
                 search_results = search_client.search(
                     search_text=prompt,
-                    query_type="semantic",
-                    semantic_configuration_name="vector-1730110777868-semantic-configuration",
-                    top=None,
-                    select=["chunk", "title", "chunk_id", "@search.score"]
+                    top=3
                 )
-
+                relevant_docs = []
                 for result in search_results:
-                    chunk_content = result.get("chunk", "")
-                    title = result.get("title", "")
-
-                    try:
-                        rows = [line.split(",") for line in chunk_content.split("\n") if line]
-                        if rows and len(rows) > 1:
-                            df = pd.DataFrame(rows[1:], columns=rows[0])
-                        else:
-                            df = pd.DataFrame()
-
-                        excel_buffer = BytesIO()
-                        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                            df.to_excel(writer, index=False, sheet_name=title[:31])
-                        excel_buffer.seek(0)
-                        excel_buffers.append(excel_buffer)
-
-                        relevant_docs.append({
-                            "id": result.get("chunk_id"),
-                            "title": title,
-                            "preview": chunk_content[:500],
-                            "score": result.get("@search.score")
-                        })
-                    except Exception as e:
-                        relevant_docs.append({"error": f"Failed to process chunk: {e}"})
+                    relevant_docs.append({
+                        "id": result.get("chunk_id"),
+                        "title": result.get("title"),
+                        "preview": result.get("chunk", "")[:500],  # 最大500文字までプレビュー
+                        "score": result.get("@search.score")
+                    })
             except Exception as e:
                 relevant_docs = [{"error": str(e)}]
         else:
             relevant_docs = [{"error": "Azure Search クライアントが初期化されていないか、接続エラーが発生しています。"}]
 
-        if excel_buffers:
-            combined_excel = BytesIO()
-            with pd.ExcelWriter(combined_excel, engine='openpyxl') as writer:
-                for i, buffer in enumerate(excel_buffers):
-                    buffer.seek(0)
-                    temp_df = pd.read_excel(buffer, engine='openpyxl')
-                    temp_df.to_excel(writer, index=False, sheet_name=f"Sheet{i+1}")
-            combined_excel.seek(0)
-            file_output = combined_excel
+        relevant_docs_text = "\n".join([str(doc) for doc in relevant_docs])
+
+        # AI応答生成と出力形式判断
+        input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
+        response_content, output_format = generate_ai_response_and_format(input_data, response_model)
+
+        # 応答を分割して処理
+        chat_output, file_output = parse_response_content(response_content)
+
+        # Excelへの統合処理
+        if excel_dataframes:
+            combined_df = pd.concat(excel_dataframes, ignore_index=True)
             output_format = "xlsx"
+            excel_buffer = BytesIO()  # BytesIOオブジェクトを作成
+            combined_df.to_excel(excel_buffer, index=False, engine='openpyxl')  # Excelに書き込む
+            excel_buffer.seek(0)  # ファイルの先頭にポインタを戻す
+            file_output = excel_buffer  # ファイル出力用に渡す
 
-        input_data = f"アップロードされたファイル内容:\n{file_contents}\nプロンプト:\n{prompt}"
-        response_content, _ = generate_ai_response_and_format(input_data, response_model)
-
+        # チャット履歴用
         session['chat_history'].append({
             'user': input_data,
-            'assistant': response_content
+            'assistant': chat_output
         })
 
-        if file_output:
-            file_data, mime_type, file_format = generate_file(file_output, output_format)
-            temp_filename = f"{uuid.uuid4()}.{file_format}"
-            file_path = os.path.join(SAVE_DIR, temp_filename)
-            with open(file_path, 'wb') as f:
-                file_data.seek(0)
-                f.write(file_data.read())
+        # ファイル生成と保存
+        file_data, mime_type, file_format = generate_file(file_output, output_format)
+        temp_filename = f"{uuid.uuid4()}.{file_format}"
+        file_path = os.path.join(SAVE_DIR, temp_filename)
+        with open(file_path, 'wb') as f:
+            file_data.seek(0)
+            f.write(file_data.read())
 
-            download_url = url_for('download_file', filename=temp_filename, _external=True)
-            session['chat_history'][-1]['assistant'] += f" <a href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
+        download_url = url_for('download_file', filename=temp_filename, _external=True)
+        session['chat_history'][-1]['assistant'] += f" <a href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
 
         return render_template('index.html', chat_history=session['chat_history'])
 
@@ -181,21 +161,28 @@ def process_files_and_prompt():
 def download_file(filename):
     file_path = os.path.abspath(os.path.join(SAVE_DIR, filename))
     if not file_path.startswith(os.path.abspath(SAVE_DIR)):
+        print(f"Invalid file path: {file_path}")
         return "Invalid file path", 400
 
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-        mimetype_map = {
-            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'pdf': 'application/pdf',
-            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'txt': 'text/plain',
-            'png': 'image/png',
-            'jpg': 'image/jpeg'
-        }
-        ext = filename.split('.')[-1]
-        mimetype = mimetype_map.get(ext, 'application/octet-stream')
-        return send_file(file_path, mimetype=mimetype, as_attachment=True, download_name=filename)
+        try:
+            mimetype_map = {
+                'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'pdf': 'application/pdf',
+                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'txt': 'text/plain',
+                'png': 'image/png',
+                'jpg': 'image/jpeg'
+            }
+            ext = filename.split('.')[-1]
+            mimetype = mimetype_map.get(ext, 'application/octet-stream')
 
+            return send_file(file_path, mimetype=mimetype, as_attachment=True, download_name=filename)
+        except Exception as e:
+            print(f"Error sending file: {e}")
+            return "ファイル送信中にエラーが発生しました。", 500
+
+    print(f"File not found or empty: {file_path}")
     return "File not found or file is empty", 404
 
 def save_image_to_temp(image_data):
@@ -221,6 +208,7 @@ def generate_ai_response_and_format(input_data, deployment_name):
             "生成するExcelファイルには、1行目に列名、2行目以降にデータ行を含める必要があります。"
             "ファイルで出力すべき内容以外の文章はテキスト形式で返してください。"
             "必ずファイル形式と内容を判断し、必要に応じて表形式を正しく出力してください。"
+            "Flaskの/downloadエンドポイントを使用してリンクをHTML <a>タグで提供してください。"
         )},
         {"role": "user", "content": input_data}
     ]
@@ -238,10 +226,10 @@ def determine_output_format_from_response(response_content):
 def generate_file(content, file_format):
     output = BytesIO()
     if file_format == "xlsx":
-        if isinstance(content, BytesIO):
-            content.seek(0)
+        if isinstance(content, BytesIO):  # BytesIOオブジェクトの場合
+            content.seek(0)  # ポインタを先頭に戻す
             return content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file_format
-        else:
+        else:  # 通常の文字列コンテンツの場合
             rows = [row.split("\t") for row in content.split("\n") if row]
             df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -256,13 +244,16 @@ def generate_file(content, file_format):
         doc = Document()
         doc.add_paragraph(content)
         doc.save(output)
-    elif isinstance(content, BytesIO):
-        content.seek(0)
-        return content, "application/octet-stream", file_format
     else:
         output.write(content.encode("utf-8"))
     output.seek(0)
     return output, "application/octet-stream", file_format
+    
+def parse_response_content(response_content):
+    if "ファイル内容:" in response_content:
+        parts = response_content.split("ファイル内容:", 1)
+        return parts[0].strip(), parts[1].strip()
+    return response_content, ""
 
 if __name__ == '__main__':
     app.run(debug=True)
