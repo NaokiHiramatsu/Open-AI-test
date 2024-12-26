@@ -108,7 +108,7 @@ def process_files_and_prompt():
                     relevant_docs.append({
                         "id": result.get("chunk_id"),
                         "title": result.get("title"),
-                        "preview": result.get("chunk", "")[:500],  # 最大500文字までプレビュー
+                        "preview": result.get("chunk", ""),  # 全データを取得
                         "score": result.get("@search.score")
                     })
             except Exception as e:
