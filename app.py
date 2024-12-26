@@ -101,10 +101,7 @@ def process_files_and_prompt():
             try:
                 search_results = search_client.search(
                     search_text=prompt,
-                    query_type="semantic",
-                    semantic_configuration_name="vector-1730110777868-semantic-configuration",
-                    top=3,
-                    select=["chunk", "title", "chunk_id", "@search.score"]  # 必要なフィールドのみ選択
+                    top=3
                 )
                 relevant_docs = []
                 for result in search_results:
