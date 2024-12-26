@@ -101,19 +101,24 @@ def process_files_and_prompt():
             try:
                 search_results = search_client.search(
                     search_text=prompt,
-                    top=3
+                    query_type="semantic",
+                    semantic_configuration_name="vector-1730110777868-semantic-configuration",
+                    top=None,  # 制限なしですべての結果を取得
+                    select=["chunk", "title", "chunk_id", "@search.score"]
                 )
                 relevant_docs = []
-                excel_buffers = []  # 検索結果からExcelデータを格納するリスト
+                excel_buffers = []
 
                 for result in search_results:
                     chunk_content = result.get("chunk", "")
                     title = result.get("title", "")
 
-                    # chunk_content を DataFrame に変換
                     try:
-                        rows = [row.split(',') for row in chunk_content.split('\n') if row]
-                        df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
+                        # 行ごとに分割しデータフレームに変換
+                        rows = [line.split(",") for line in chunk_content.split("\n") if line]
+                        df = pd.DataFrame(rows)
+
+                        # データフレームをExcelバッファに保存
                         excel_buffer = BytesIO()
                         with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
                             df.to_excel(writer, index=False, sheet_name=title[:31])
@@ -123,11 +128,11 @@ def process_files_and_prompt():
                         relevant_docs.append({
                             "id": result.get("chunk_id"),
                             "title": title,
-                            "preview": chunk_content[:500],  # 最大500文字までプレビュー
+                            "preview": chunk_content[:500],
                             "score": result.get("@search.score")
                         })
                     except Exception as e:
-                        relevant_docs.append({"error": f"Failed to process chunk as table: {e}"})
+                        relevant_docs.append({"error": f"Failed to process chunk: {e}"})
             except Exception as e:
                 relevant_docs = [{"error": str(e)}]
         else:
@@ -268,7 +273,7 @@ def generate_file(content, file_format):
         output.write(content.encode("utf-8"))
     output.seek(0)
     return output, "application/octet-stream", file_format
-    
+
 def parse_response_content(response_content):
     if "ファイル内容:" in response_content:
         parts = response_content.split("ファイル内容:", 1)
