@@ -80,9 +80,9 @@ def process_files_and_prompt():
 
     try:
         file_data_text = []
-        excel_dataframes = []  # Excelデータを格納するリスト
-        file_output = BytesIO()  # デフォルト初期化
-        output_format = "txt"  # デフォルト初期化
+        excel_dataframes = []
+        file_output = None
+        output_format = "txt"
 
         for file in files:
             if file and file.filename.endswith('.xlsx'):
@@ -98,7 +98,6 @@ def process_files_and_prompt():
 
         file_contents = "\n\n".join(file_data_text) if file_data_text else "なし"
 
-        # Azure Search 呼び出し
         relevant_docs = []
         excel_buffers = []
 
@@ -153,7 +152,6 @@ def process_files_and_prompt():
             file_output = combined_excel
             output_format = "xlsx"
 
-        # チャット履歴用
         input_data = f"アップロードされたファイル内容:\n{file_contents}\nプロンプト:\n{prompt}"
         response_content, _ = generate_ai_response_and_format(input_data, response_model)
 
@@ -162,16 +160,16 @@ def process_files_and_prompt():
             'assistant': response_content
         })
 
-        # ファイル生成と保存
-        file_data, mime_type, file_format = generate_file(file_output, output_format)
-        temp_filename = f"{uuid.uuid4()}.{file_format}"
-        file_path = os.path.join(SAVE_DIR, temp_filename)
-        with open(file_path, 'wb') as f:
-            file_data.seek(0)
-            f.write(file_data.read())
+        if file_output:
+            file_data, mime_type, file_format = generate_file(file_output, output_format)
+            temp_filename = f"{uuid.uuid4()}.{file_format}"
+            file_path = os.path.join(SAVE_DIR, temp_filename)
+            with open(file_path, 'wb') as f:
+                file_data.seek(0)
+                f.write(file_data.read())
 
-        download_url = url_for('download_file', filename=temp_filename, _external=True)
-        session['chat_history'][-1]['assistant'] += f" <a href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
+            download_url = url_for('download_file', filename=temp_filename, _external=True)
+            session['chat_history'][-1]['assistant'] += f" <a href='{download_url}' target='_blank'>生成されたファイルをダウンロード</a>"
 
         return render_template('index.html', chat_history=session['chat_history'])
 
@@ -183,28 +181,21 @@ def process_files_and_prompt():
 def download_file(filename):
     file_path = os.path.abspath(os.path.join(SAVE_DIR, filename))
     if not file_path.startswith(os.path.abspath(SAVE_DIR)):
-        print(f"Invalid file path: {file_path}")
         return "Invalid file path", 400
 
     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-        try:
-            mimetype_map = {
-                'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'pdf': 'application/pdf',
-                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'txt': 'text/plain',
-                'png': 'image/png',
-                'jpg': 'image/jpeg'
-            }
-            ext = filename.split('.')[-1]
-            mimetype = mimetype_map.get(ext, 'application/octet-stream')
+        mimetype_map = {
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'pdf': 'application/pdf',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'txt': 'text/plain',
+            'png': 'image/png',
+            'jpg': 'image/jpeg'
+        }
+        ext = filename.split('.')[-1]
+        mimetype = mimetype_map.get(ext, 'application/octet-stream')
+        return send_file(file_path, mimetype=mimetype, as_attachment=True, download_name=filename)
 
-            return send_file(file_path, mimetype=mimetype, as_attachment=True, download_name=filename)
-        except Exception as e:
-            print(f"Error sending file: {e}")
-            return "ファイル送信中にエラーが発生しました。", 500
-
-    print(f"File not found or empty: {file_path}")
     return "File not found or file is empty", 404
 
 def save_image_to_temp(image_data):
@@ -230,7 +221,6 @@ def generate_ai_response_and_format(input_data, deployment_name):
             "生成するExcelファイルには、1行目に列名、2行目以降にデータ行を含める必要があります。"
             "ファイルで出力すべき内容以外の文章はテキスト形式で返してください。"
             "必ずファイル形式と内容を判断し、必要に応じて表形式を正しく出力してください。"
-            "Flaskの/downloadエンドポイントを使用してリンクをHTML <a>タグで提供してください。"
         )},
         {"role": "user", "content": input_data}
     ]
@@ -248,10 +238,10 @@ def determine_output_format_from_response(response_content):
 def generate_file(content, file_format):
     output = BytesIO()
     if file_format == "xlsx":
-        if isinstance(content, BytesIO):  # BytesIOオブジェクトの場合
-            content.seek(0)  # ポインタを先頭に戻す
+        if isinstance(content, BytesIO):
+            content.seek(0)
             return content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file_format
-        else:  # 通常の文字列コンテンツの場合
+        else:
             rows = [row.split("\t") for row in content.split("\n") if row]
             df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -266,16 +256,13 @@ def generate_file(content, file_format):
         doc = Document()
         doc.add_paragraph(content)
         doc.save(output)
+    elif isinstance(content, BytesIO):
+        content.seek(0)
+        return content, "application/octet-stream", file_format
     else:
         output.write(content.encode("utf-8"))
     output.seek(0)
     return output, "application/octet-stream", file_format
-
-def parse_response_content(response_content):
-    if "ファイル内容:" in response_content:
-        parts = response_content.split("ファイル内容:", 1)
-        return parts[0].strip(), parts[1].strip()
-    return response_content, ""
 
 if __name__ == '__main__':
     app.run(debug=True)
