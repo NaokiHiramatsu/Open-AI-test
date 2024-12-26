@@ -104,13 +104,30 @@ def process_files_and_prompt():
                     top=3
                 )
                 relevant_docs = []
+                excel_buffers = []  # 検索結果からExcelデータを格納するリスト
+
                 for result in search_results:
-                    relevant_docs.append({
-                        "id": result.get("chunk_id"),
-                        "title": result.get("title"),
-                        "preview": result.get("chunk", "")[:500],  # 最大500文字までプレビュー
-                        "score": result.get("@search.score")
-                    })
+                    chunk_content = result.get("chunk", "")
+                    title = result.get("title", "")
+
+                    # chunk_content を DataFrame に変換
+                    try:
+                        rows = [row.split(',') for row in chunk_content.split('\n') if row]
+                        df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
+                        excel_buffer = BytesIO()
+                        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                            df.to_excel(writer, index=False, sheet_name=title[:31])
+                        excel_buffer.seek(0)
+                        excel_buffers.append(excel_buffer)
+
+                        relevant_docs.append({
+                            "id": result.get("chunk_id"),
+                            "title": title,
+                            "preview": chunk_content[:500],  # 最大500文字までプレビュー
+                            "score": result.get("@search.score")
+                        })
+                    except Exception as e:
+                        relevant_docs.append({"error": f"Failed to process chunk as table: {e}"})
             except Exception as e:
                 relevant_docs = [{"error": str(e)}]
         else:
@@ -125,14 +142,17 @@ def process_files_and_prompt():
         # 応答を分割して処理
         chat_output, file_output = parse_response_content(response_content)
 
-        # Excelへの統合処理
-        if excel_dataframes:
-            combined_df = pd.concat(excel_dataframes, ignore_index=True)
+        # 検索結果から生成されたExcelデータの統合
+        if excel_buffers:
+            combined_excel = BytesIO()
+            with pd.ExcelWriter(combined_excel, engine='openpyxl') as writer:
+                for i, buffer in enumerate(excel_buffers):
+                    buffer.seek(0)
+                    temp_df = pd.read_excel(buffer, engine='openpyxl')
+                    temp_df.to_excel(writer, index=False, sheet_name=f"Sheet{i+1}")
+            combined_excel.seek(0)
+            file_output = combined_excel
             output_format = "xlsx"
-            excel_buffer = BytesIO()  # BytesIOオブジェクトを作成
-            combined_df.to_excel(excel_buffer, index=False, engine='openpyxl')  # Excelに書き込む
-            excel_buffer.seek(0)  # ファイルの先頭にポインタを戻す
-            file_output = excel_buffer  # ファイル出力用に渡す
 
         # チャット履歴用
         session['chat_history'].append({
