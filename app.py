@@ -81,6 +81,8 @@ def process_files_and_prompt():
     try:
         file_data_text = []
         excel_dataframes = []  # Excelデータを格納するリスト
+        file_output = None  # 初期化
+        output_format = "txt"  # 初期化
 
         for file in files:
             if file and file.filename.endswith('.xlsx'):
@@ -116,7 +118,7 @@ def process_files_and_prompt():
                     try:
                         # 行ごとに分割しデータフレームに変換
                         rows = [line.split(",") for line in chunk_content.split("\n") if line]
-                        df = pd.DataFrame(rows[1:], columns=rows[0]) if rows else pd.DataFrame()
+                        df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
 
                         # データフレームをExcelバッファに保存
                         excel_buffer = BytesIO()
@@ -140,10 +142,6 @@ def process_files_and_prompt():
 
         relevant_docs_text = "\n".join([str(doc) for doc in relevant_docs])
 
-        # AI応答生成と出力形式判断
-        input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
-        response_content, output_format = generate_ai_response_and_format(input_data, response_model)
-
         # 検索結果から生成されたExcelデータの統合
         if excel_buffers:
             combined_excel = BytesIO()
@@ -156,6 +154,10 @@ def process_files_and_prompt():
             file_output = combined_excel
             output_format = "xlsx"
 
+        # AI応答生成と出力形式判断
+        input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
+        response_content, _ = generate_ai_response_and_format(input_data, response_model)
+
         # チャット履歴用
         session['chat_history'].append({
             'user': input_data,
@@ -163,6 +165,12 @@ def process_files_and_prompt():
         })
 
         # ファイル生成と保存
+        if file_output is None:
+            file_output = BytesIO()
+            file_output.write(response_content.encode('utf-8'))
+            file_output.seek(0)
+            output_format = "txt"
+
         file_data, mime_type, file_format = generate_file(file_output, output_format)
         temp_filename = f"{uuid.uuid4()}.{file_format}"
         file_path = os.path.join(SAVE_DIR, temp_filename)
