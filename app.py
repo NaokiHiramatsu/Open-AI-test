@@ -85,6 +85,9 @@ def process_files_and_prompt():
         for file in files:
             if file and file.filename.endswith('.xlsx'):
                 df = pd.read_excel(file, engine='openpyxl')
+                if df.empty:
+                    print(f"{file.filename} のデータが空です。")
+                    continue
                 excel_dataframes.append(df)
                 columns = df.columns.tolist()
                 rows_text = df.to_string(index=False)
@@ -128,11 +131,17 @@ def process_files_and_prompt():
         # Excelへの統合処理
         if excel_dataframes:
             combined_df = pd.concat(excel_dataframes, ignore_index=True)
+            print("結合されたデータフレーム:")
+            print(combined_df.head())
             output_format = "xlsx"
-            excel_buffer = BytesIO()  # BytesIOオブジェクトを作成
-            combined_df.to_excel(excel_buffer, index=False, engine='openpyxl')  # Excelに書き込む
-            excel_buffer.seek(0)  # ファイルの先頭にポインタを戻す
-            file_output = excel_buffer  # ファイル出力用に渡す
+            excel_buffer = BytesIO()
+            try:
+                combined_df.to_excel(excel_buffer, index=False, engine='openpyxl')
+                excel_buffer.seek(0)
+                file_output = excel_buffer
+                print("Excelファイルが正常に書き込まれました。")
+            except Exception as e:
+                print(f"Excelファイルへの書き込み中にエラーが発生しました: {e}")
 
         # チャット履歴用
         session['chat_history'].append({
@@ -224,31 +233,36 @@ def determine_output_format_from_response(response_content):
     return "txt"
 
 def generate_file(content, file_format):
-    output = BytesIO()
-    if file_format == "xlsx":
-        if isinstance(content, BytesIO):  # BytesIOオブジェクトの場合
-            content.seek(0)  # ポインタを先頭に戻す
-            return content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file_format
-        else:  # 通常の文字列コンテンツの場合
-            rows = [row.split("\t") for row in content.split("\n") if row]
-            df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                df.to_excel(writer, index=False, sheet_name="Sheet1")
-    elif file_format == "pdf":
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.multi_cell(0, 10, content)
-        pdf.output(output)
-    elif file_format == "docx":
-        doc = Document()
-        doc.add_paragraph(content)
-        doc.save(output)
-    else:
-        output.write(content.encode("utf-8"))
-    output.seek(0)
-    return output, "application/octet-stream", file_format
-    
+    try:
+        output = BytesIO()
+        if file_format == "xlsx":
+            if isinstance(content, BytesIO):  # すでに BytesIO の場合
+                content.seek(0)
+                return content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file_format
+            else:  # コンテンツが文字列の場合、データフレームを作成
+                rows = [row.split("\t") for row in content.split("\n") if row]
+                df = pd.DataFrame(rows[1:], columns=rows[0]) if len(rows) > 1 else pd.DataFrame()
+                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                    df.to_excel(writer, index=False, sheet_name="Sheet1")
+        elif file_format == "pdf":
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+            pdf.multi_cell(0, 10, content)
+            pdf.output(output)
+        elif file_format == "docx":
+            doc = Document()
+            doc.add_paragraph(content)
+            doc.save(output)
+        else:
+            output.write(content.encode("utf-8"))
+        output.seek(0)
+        print("ファイルが正常に生成されました。")
+        return output, "application/octet-stream", file_format
+    except Exception as e:
+        print(f"ファイル生成エラー: {e}")
+        raise
+
 def parse_response_content(response_content):
     if "ファイル内容:" in response_content:
         parts = response_content.split("ファイル内容:", 1)
