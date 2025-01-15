@@ -123,7 +123,7 @@ def process_files_and_prompt():
 
         # AI応答生成と出力形式判断
         input_data = f"アップロードされたファイル内容:\n{file_contents}\n\n関連ドキュメント:\n{relevant_docs_text}\n\nプロンプト:\n{prompt}"
-        response_content, output_format = generate_ai_response_and_format(input_data, response_model)
+        response_content, output_format, suggested_filename = generate_ai_response_and_format(input_data, response_model)
 
         # 応答を分割して処理
         chat_output, file_output = parse_response_content(response_content)
@@ -151,7 +151,7 @@ def process_files_and_prompt():
 
         # ファイル生成と保存
         file_data, mime_type, file_format = generate_file(file_output, output_format)
-        temp_filename = f"{uuid.uuid4()}.{file_format}"
+        temp_filename = f"{suggested_filename}.{file_format}" if suggested_filename else f"{uuid.uuid4()}.{file_format}"
         file_path = os.path.join(SAVE_DIR, temp_filename)
 
         # デバッグログ追加
@@ -223,6 +223,7 @@ def generate_ai_response_and_format(input_data, deployment_name):
             "生成するExcelファイルには、1行目に列名、2行目以降にデータ行を含める必要があります。"
             "ファイルで出力すべき内容以外の文章はテキスト形式で返してください。"
             "必ずファイル形式と内容を判断し、必要に応じて表形式を正しく出力してください。"
+            "生成されるファイルには適切な名前を付けてください。例えば、プロンプトに関連する名前を考えてください。"
             "Flaskの/downloadエンドポイントを使用してリンクをHTML <a>タグで提供してください。"
         )},
         {"role": "user", "content": input_data}
@@ -230,13 +231,19 @@ def generate_ai_response_and_format(input_data, deployment_name):
     response = openai.ChatCompletion.create(engine=deployment_name, messages=messages, max_tokens=2000)
     response_text = response['choices'][0]['message']['content']
     output_format = determine_output_format_from_response(response_text)
-    return response_text, output_format
+    suggested_filename = extract_filename_from_response(response_text)
+    return response_text, output_format, suggested_filename
 
 def determine_output_format_from_response(response_content):
     if "excel" in response_content.lower(): return "xlsx"
     if "pdf" in response_content.lower(): return "pdf"
     if "word" in response_content.lower(): return "docx"
     return "txt"
+
+def extract_filename_from_response(response_content):
+    import re
+    match = re.search(r"ファイル名: ([\w\-]+)", response_content)
+    return match.group(1) if match else None
 
 def generate_file(content, file_format):
     try:
