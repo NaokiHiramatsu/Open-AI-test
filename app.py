@@ -132,7 +132,7 @@ def process_files_and_prompt():
         if excel_dataframes:
             combined_df = pd.concat(excel_dataframes, ignore_index=True)
             print("結合されたデータフレーム:")
-            print(combined_df.head())
+            print(combined_df)
             output_format = "xlsx"
             excel_buffer = BytesIO()
             try:
@@ -153,6 +153,12 @@ def process_files_and_prompt():
         file_data, mime_type, file_format = generate_file(file_output, output_format)
         temp_filename = f"{uuid.uuid4()}.{file_format}"
         file_path = os.path.join(SAVE_DIR, temp_filename)
+
+        # デバッグログ追加
+        print(f"生成されたファイル名: {temp_filename}")
+        print(f"保存先: {file_path}")
+        print(f"BytesIO内容の先頭: {file_data.getvalue()[:100]}")  # 先頭100バイトを確認
+
         with open(file_path, 'wb') as f:
             file_data.seek(0)
             f.write(file_data.read())
